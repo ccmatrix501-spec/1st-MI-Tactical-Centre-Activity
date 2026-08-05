@@ -35,25 +35,6 @@
     <script type="module" crossorigin src="./assets/index-D8SEAL-n.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-DJKkv6Nr.css">
     <script>
-      // Force cache clear on first v1.4.7 load
-      (function() {
-        const key = "mi-web-cache-reset-1.4.7";
-        if (!localStorage.getItem(key)) {
-          localStorage.setItem(key, "done");
-          if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
-          }
-          if ("caches" in window) {
-            caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-          }
-          // Small delay then reload with new build param
-          setTimeout(() => {
-            const u = new URL(location.href);
-            u.searchParams.set("build", "147");
-            location.replace(u.toString());
-          }, 400);
-        }
-      })();
     </script>
   </body>
 </html>
