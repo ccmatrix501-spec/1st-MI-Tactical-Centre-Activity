@@ -1,25 +1,14 @@
-1st M.I. Tactical Centre – Discord Activity package (based on v1.4.8)
+1st M.I. Tactical Centre mobile web build v1.4.8
 
-This package contains your original web build PLUS the files needed
-to run it as a Discord Activity on Vercel.
+This update makes the web version use the EXACT same wording as the desktop App.tsx for:
 
-FILES
------
-api/token.js                  → Vercel serverless function for Discord OAuth
-public/discord-activity.js    → Client-side Discord SDK bootstrap
-mi-web-update-v1.4.8/
-  index-D8SEAL-n.js           → Your original app (unchanged)
-  version.txt
-DISCORD-ACTIVITY-SETUP.md     → Full setup guide (read this)
+- Specialisation Certifications checklists (Demon / Nightmare / Cerberus / Hellfire)
+- Specialisation requirements popups (Sentinel / Driller / Cerberus / Doughboy)
 
-QUICK START
------------
-1. Read DISCORD-ACTIVITY-SETUP.md
-2. Add DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in Vercel
-3. Place api/token.js and public/discord-activity.js in your project
-4. Put your real Client ID inside discord-activity.js
-5. Set the URL Mapping in the Discord Developer Portal
-6. Deploy and test inside a Discord voice channel
-
-The original app files are left untouched so your normal website
-continues to work outside Discord.
+HOW TO APPLY
+1. Keep your existing assets/ folder.
+2. Overwrite:
+   assets/index-D8SEAL-n.js   ← with the file from this zip
+   version.txt
+3. Commit + push (or re-upload).
+4. Hard-refresh or open clear-cache.html once.
