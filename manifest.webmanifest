@@ -1,0 +1,25 @@
+{
+  "name": "1st M.I. Tactical Centre",
+  "short_name": "M.I. Tactical",
+  "description": "Tactical maps, certifications, training materials, awards and 3D base planning for the 1st M.I.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#050607",
+  "theme_color": "#050607",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

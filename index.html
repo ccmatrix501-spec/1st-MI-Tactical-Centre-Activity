@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#050607" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="description" content="1st M.I. Tactical Centre — Maps, OPs, Certs & Merits/Awards" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.png" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <title>1st M.I. Tactical Centre</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; background: #050607; color: #fff; font-family: Arial, Helvetica, sans-serif; }
+      .boot { display: grid; place-items: center; height: 100%; text-align: center; padding: 20px; }
+      .boot h1 { color: #1eff00; margin-bottom: 8px; }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="boot">
+        <div>
+          <h1>1st M.I. Tactical Centre</h1>
+          <p>This application requires JavaScript.</p>
+          <p style="opacity:0.7;font-size:14px;">v1.4.7</p>
+        </div>
+      </div>
+    </div>
+    <!-- 
+      IMPORTANT: Keep the previous assets/index-*.js and assets/index-*.css files.
+      The main bundle is still the v1.4.6 web build. 
+      After uploading, open the site once — the cache cleaner will force a refresh.
+    -->
+    <script type="module" crossorigin src="./assets/index-D8SEAL-n.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DJKkv6Nr.css">
+    <script>
+      // Force cache clear on first v1.4.7 load
+      (function() {
+        const key = "mi-web-cache-reset-1.4.7";
+        if (!localStorage.getItem(key)) {
+          localStorage.setItem(key, "done");
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
+          }
+          if ("caches" in window) {
+            caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+          }
+          // Small delay then reload with new build param
+          setTimeout(() => {
+            const u = new URL(location.href);
+            u.searchParams.set("build", "147");
+            location.replace(u.toString());
+          }, 400);
+        }
+      })();
+    </script>
+    <script type="module" src="/discord-activity.js"></script>
+  </body>
+</html>
