@@ -1,22 +1,17 @@
-1st M.I. Tactical Centre — v1.4.7 package contents
-=================================================
+Settings tab patch for 1st M.I. Tactical Centre (web)
 
-INCLUDED
-- App.tsx                 Desktop source you provided (reference only)
-- index.html              v1.4.7 shell + cache bust
-- version.txt             v1.4.7
-- sw.js                   service worker (cache disabled / always latest)
-- manifest.webmanifest
-- clear-cache.html
-- DEPLOY-INSTRUCTIONS.txt
-- UPLOAD-INSTRUCTIONS.txt
-- .nojekyll
-- _redirects
+WHAT CHANGED
+- Added "Settings" as a tab in the main navigation (same as desktop).
+- Clicking the Settings tab opens the existing Settings panel
+  (Colour Scheme, Company, Trainer Name, Save Folder, Keybinds).
 
-NOT INCLUDED (must come from your previous web ZIP / GitHub repo)
-- assets/ folder (maps, markers, GLBs, icons, built JS/CSS)
-- icon.png, icon-192.png, icon-512.png, icon.ico
-- splash images
+INSTALL
+1. Overwrite on GitHub:
+     assets/index-D8SEAL-n.js
+     version.txt
+2. Commit + push
+3. Hard-refresh (Ctrl+Shift+R) or open clear-cache.html
 
-Merge this ZIP with your existing assets folder, then upload the combined
-site to GitHub Pages.
+NOTE
+This is a navigation patch. The full desktop interactive tutorial
+and setup spotlight system are not included (those need a source rebuild).

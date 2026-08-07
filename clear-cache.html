@@ -1,40 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Refreshing Tactical Centre</title>
+  <meta charset="utf-8">
+  <title>Clear Cache — 1st M.I. Tactical Centre</title>
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      background: #050607;
-      color: #fff;
-      display: grid;
-      place-items: center;
-      height: 100vh;
-      margin: 0;
-      text-align: center;
-    }
+    body { font-family: system-ui, sans-serif; background:#050607; color:#fff; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+    .box { text-align:center; padding:2rem; border:1px solid #1eff00; border-radius:12px; }
   </style>
 </head>
 <body>
-  <div>
-    <h1>Refreshing Tactical Centre</h1>
-    <p>Removing the old mobile build and cached files…</p>
+  <div class="box">
+    <h1>Clearing cache…</h1>
+    <p>Reloading the latest build.</p>
   </div>
   <script>
     (async () => {
       try {
-        if ("serviceWorker" in navigator) {
+        if ('serviceWorker' in navigator) {
           const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister()));
+          await Promise.all(regs.map(r => r.unregister()));
         }
-        if ("caches" in window) {
+        if ('caches' in window) {
           const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
+          await Promise.all(keys.map(k => caches.delete(k)));
         }
       } catch (e) {}
-      location.replace("./?build=147");
+      location.href = './?v=' + Date.now();
     })();
   </script>
 </body>
