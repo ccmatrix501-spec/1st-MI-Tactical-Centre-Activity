@@ -1,11 +1,7 @@
 /**
  * Discord Activity bootstrap – Matrix's 1st M.I. Tactical Centre
  * Client ID: 1532302380237066271
- *
- * Runs only inside Discord Activity iframe.
- * Calls discordSdk.ready() so the frame does not stay white.
  */
-
 (async function () {
   const CLIENT_ID = "1532302380237066271";
 

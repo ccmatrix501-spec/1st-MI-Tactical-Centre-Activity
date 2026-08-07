@@ -1,17 +1,14 @@
-Settings tab patch for 1st M.I. Tactical Centre (web)
+RESTORED: original web CSS + original web JS (v1.4.8)
 
-WHAT CHANGED
-- Added "Settings" as a tab in the main navigation (same as desktop).
-- Clicking the Settings tab opens the existing Settings panel
-  (Colour Scheme, Company, Trainer Name, Save Folder, Keybinds).
+This reverts the desktop-rebuild look.
+- Uses index-DJKkv6Nr.css (old web styling)
+- Uses previous web JS (mobile layout, Settings as modal/button)
+- Specialisation wording still matches desktop
 
-INSTALL
-1. Overwrite on GitHub:
-     assets/index-D8SEAL-n.js
-     version.txt
-2. Commit + push
-3. Hard-refresh (Ctrl+Shift+R) or open clear-cache.html
+Overwrite on GitHub:
+  index.html
+  assets/index-D8SEAL-n.js
+  assets/index-DJKkv6Nr.css
+  version.txt
 
-NOTE
-This is a navigation patch. The full desktop interactive tutorial
-and setup spotlight system are not included (those need a source rebuild).
+Then open clear-cache.html or Ctrl+Shift+R.
