@@ -8,28 +8,20 @@ export default async function handler(req, res) {
   if (!code) return res.status(400).json({ error: "No code provided" });
   const clientId = process.env.DISCORD_CLIENT_ID || "1532302380237066271";
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-  if (!clientSecret) {
-    return res.status(500).json({ error: "Missing DISCORD_CLIENT_SECRET on Vercel" });
-  }
+  if (!clientSecret) return res.status(500).json({ error: "Missing DISCORD_CLIENT_SECRET" });
   try {
     const response = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: "authorization_code",
-        code,
+        client_id: clientId, client_secret: clientSecret,
+        grant_type: "authorization_code", code,
       }),
     });
     const data = await response.json();
-    if (!response.ok || data.error) {
-      console.error("Discord token error:", data);
-      return res.status(400).json(data);
-    }
+    if (!response.ok || data.error) return res.status(400).json(data);
     return res.status(200).json({ access_token: data.access_token });
-  } catch (err) {
-    console.error(err);
+  } catch (e) {
     return res.status(500).json({ error: "Token exchange failed" });
   }
 }
