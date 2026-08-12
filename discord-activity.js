@@ -19,9 +19,8 @@
     });
     if (!tokenRes.ok) throw new Error("Token exchange failed");
     const { access_token } = await tokenRes.json();
-    const auth = await discordSdk.commands.authenticate({ access_token });
+    window.miDiscordAuth = await discordSdk.commands.authenticate({ access_token });
     window.miDiscordSdk = discordSdk;
-    window.miDiscordAuth = auth;
   } catch (err) {
     console.error("[1st MI] Discord setup failed:", err);
   }
