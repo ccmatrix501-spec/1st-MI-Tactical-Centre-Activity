@@ -1,0 +1,51 @@
+1st M.I. Tactical Centre — READY-TO-HOST MOBILE WEBSITE (v1.4.7)
+
+HOW TO USE THIS ZIP WITH YOUR EXISTING WEB BUILD
+================================================
+
+This package does NOT include the binary assets folder (maps, markers, GLBs,
+icons). Those only exist in your previous web ZIP / GitHub repo.
+
+To ship v1.4.7 on GitHub Pages:
+
+1. Start from your existing working 1.4.6 website folder (the one that already
+   has assets/, icon-192.png, icon-512.png, icon.png, etc.).
+
+2. Copy these files from this ZIP into that folder (overwrite when asked):
+   - version.txt
+   - DEPLOY-INSTRUCTIONS.txt
+   - UPLOAD-INSTRUCTIONS.txt
+   - sw.js
+   - manifest.webmanifest
+   - clear-cache.html
+   - index.html   (only if you want the v1.4.7 cache-bust index)
+   - .nojekyll
+   - _redirects
+
+3. Keep your entire existing assets/ folder unchanged
+   (maps, markers, mi3d, companies, bugholes, restriction-maps,
+   training-material, and the big index-*.js / index-*.css bundles).
+
+4. Optional but recommended: open assets/index-D8SEAL-n.js (or whatever your
+   current bundle is named) and find/replace:
+     1.4.6  →  1.4.7
+
+5. Commit and push to GitHub Pages.
+
+App.tsx in this ZIP is the desktop source you provided (for reference / future
+rebuilds). It is NOT the live web bundle — the live site still runs from the
+minified assets/index-*.js in your existing build.
+
+IMPORTANT
+- index.html must stay at the website root
+- assets/ must be uploaded completely
+- HTTPS is required for installable PWA behaviour
+
+MOBILE
+- Android/Chrome: Install app / Add to Home screen
+- iPhone/iPad/Safari: Share → Add to Home Screen
+
+WEB SAVES
+- Export downloads JSON
+- Import via Open Save / Save Scanner
+- Desktop overlay + native folder scanner remain desktop-only
