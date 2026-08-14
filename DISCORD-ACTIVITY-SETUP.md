@@ -49,7 +49,6 @@ In your Vercel project → Settings → Environment Variables, add:
 |-------------------------|---------------------------|
 | `DISCORD_CLIENT_ID`     | Your Application ID       |
 | `DISCORD_CLIENT_SECRET` | Your Client Secret        |
-| `DISCORD_BOT_TOKEN`     | Your application bot token (required for channel/thread JSON export) |
 
 Redeploy after adding them.
 
@@ -97,8 +96,8 @@ Then make sure the script is loaded after your main app.
 
 ## Important notes
 
-- This updated build keeps the minified production app and adds a small export hook plus separate Discord export scripts/API routes.
-- Normal `.json` download export is still available. Inside the Discord Activity you can instead choose a text channel and optional active thread.
+- The original `index-D8SEAL-n.js` is a **minified production build**.  
+  I did **not** modify it. The Discord integration is added as a separate script so it doesn’t break your existing app.
 - For a deeper integration (showing Discord username inside the Tactical Centre, etc.) you will eventually need the **source code** so the SDK can be imported properly inside the React app.
 - The bootstrap only runs when it detects it is inside a Discord Activity iframe. Outside Discord your site continues to work normally.
 

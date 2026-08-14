@@ -1,197 +1,308 @@
 (function () {
-  const STYLE_ID = "mi-discord-export-style";
-  const LAST_CHANNEL_KEY = "mi-discord-export-last-channel";
-  const LAST_THREAD_KEY = "mi-discord-export-last-thread";
+  "use strict";
 
-  function downloadJson(filename, payload) {
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 500);
+  const originalCreateObjectURL = URL.createObjectURL.bind(URL);
+  const originalRevokeObjectURL = URL.revokeObjectURL.bind(URL);
+  const nativeAnchorClick = HTMLAnchorElement.prototype.click;
+  const originalAlert = window.alert.bind(window);
+  const blobByUrl = new Map();
+  let suppressNextDownloadAlert = false;
+  let modalOpen = false;
+
+  URL.createObjectURL = function (blob) {
+    const url = originalCreateObjectURL(blob);
+    if (blob instanceof Blob) blobByUrl.set(url, blob);
+    return url;
+  };
+
+  URL.revokeObjectURL = function (url) {
+    // Keep the Blob object in memory long enough for our export picker.
+    originalRevokeObjectURL(url);
+    window.setTimeout(function () { blobByUrl.delete(url); }, 120000);
+  };
+
+  window.alert = function (message) {
+    const text = String(message == null ? "" : message);
+    if (suppressNextDownloadAlert && /^(Save downloaded:|Folder save failed\. Download fallback started:)/i.test(text)) {
+      suppressNextDownloadAlert = false;
+      return;
+    }
+    return originalAlert(message);
+  };
+
+  function el(tag, attrs, text) {
+    const node = document.createElement(tag);
+    if (attrs) {
+      for (const [key, value] of Object.entries(attrs)) {
+        if (key === "class") node.className = value;
+        else if (key === "style") Object.assign(node.style, value);
+        else if (key === "disabled") node.disabled = !!value;
+        else node.setAttribute(key, String(value));
+      }
+    }
+    if (text != null) node.textContent = text;
+    return node;
   }
 
-  function ensureStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    const s = document.createElement("style");
-    s.id = STYLE_ID;
-    s.textContent = `
-      .mi-xp-backdrop{position:fixed;inset:0;z-index:2147483646;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:18px;font-family:Arial,Helvetica,sans-serif}
-      .mi-xp-modal{width:min(620px,100%);max-height:min(760px,92vh);overflow:auto;background:#090c0b;border:1px solid #1eff00;box-shadow:0 0 34px rgba(30,255,0,.18);border-radius:12px;color:#fff}
-      .mi-xp-head{display:flex;justify-content:space-between;gap:16px;align-items:center;padding:18px 20px;border-bottom:1px solid #263128}
-      .mi-xp-title{font-size:20px;font-weight:800;color:#1eff00}.mi-xp-file{font-size:12px;opacity:.7;margin-top:4px;word-break:break-all}
-      .mi-xp-close{border:0;background:transparent;color:#fff;font-size:26px;cursor:pointer;line-height:1}
-      .mi-xp-body{padding:20px}.mi-xp-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
-      .mi-xp-btn{appearance:none;border:1px solid #405044;background:#121713;color:#fff;border-radius:8px;padding:12px 14px;font-weight:700;cursor:pointer}
-      .mi-xp-btn:hover{border-color:#1eff00}.mi-xp-btn.primary{background:#173119;border-color:#1eff00;color:#dfffd9}.mi-xp-btn:disabled{opacity:.45;cursor:not-allowed}
-      .mi-xp-panel{border-top:1px solid #263128;padding-top:16px}.mi-xp-label{display:block;font-size:12px;font-weight:800;letter-spacing:.05em;color:#a8b8aa;margin:14px 0 6px;text-transform:uppercase}
-      .mi-xp-select{width:100%;box-sizing:border-box;background:#0f1410;color:#fff;border:1px solid #405044;border-radius:8px;padding:11px 12px;font-size:15px}
-      .mi-xp-status{min-height:20px;margin-top:12px;font-size:13px;color:#b9c8bb}.mi-xp-status.error{color:#ff8e8e}.mi-xp-status.ok{color:#8dff7f}
-      .mi-xp-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
-      @media(max-width:560px){.mi-xp-actions{grid-template-columns:1fr}.mi-xp-head,.mi-xp-body{padding:15px}.mi-xp-modal{max-height:94vh}}
-    `;
-    document.head.appendChild(s);
+  function safeDownload(filename, blob) {
+    const url = originalCreateObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    nativeAnchorClick.call(link);
+    link.remove();
+    window.setTimeout(function () { originalRevokeObjectURL(url); }, 1000);
   }
 
-  function context() {
-    return {
-      accessToken: window.miDiscordAccessToken || window.miDiscordAuth?.access_token || "",
-      guildId: window.miDiscordContext?.guildId || window.miDiscordSdk?.guildId || "",
-    };
+  function closeModal(root) {
+    if (root && root.parentNode) root.parentNode.removeChild(root);
+    modalOpen = false;
   }
 
-  function option(value, text) {
-    const o = document.createElement("option");
-    o.value = value;
-    o.textContent = text;
-    return o;
+  function getDiscordContext() {
+    const auth = window.miDiscordAuth;
+    const sdk = window.miDiscordSdk;
+    const token = auth && auth.access_token;
+    const guildId = (sdk && sdk.guildId) || window.miDiscordGuildId;
+    return { auth, sdk, token, guildId };
   }
 
-  async function showExportDialog(filename, payload) {
-    ensureStyle();
-    const ctx = context();
-    if (!ctx.accessToken || !ctx.guildId) return { handled: false };
+  async function waitForDiscord() {
+    try {
+      // discord-activity.js is loaded after the main document, so give it a moment
+      // to create the authentication promise if Export is clicked immediately.
+      for (let i = 0; i < 50 && !window.miDiscordReady; i += 1) {
+        await new Promise(function (resolve) { window.setTimeout(resolve, 100); });
+      }
+      if (window.miDiscordReady && typeof window.miDiscordReady.then === "function") {
+        await Promise.race([
+          window.miDiscordReady,
+          new Promise(function (resolve) { window.setTimeout(resolve, 5000); })
+        ]);
+      }
+    } catch (_) {}
+    return getDiscordContext();
+  }
 
-    return await new Promise((resolve) => {
-      const backdrop = document.createElement("div");
-      backdrop.className = "mi-xp-backdrop";
-      backdrop.innerHTML = `
-        <div class="mi-xp-modal" role="dialog" aria-modal="true" aria-label="Export Save">
-          <div class="mi-xp-head">
-            <div><div class="mi-xp-title">EXPORT SAVE</div><div class="mi-xp-file"></div></div>
-            <button class="mi-xp-close" type="button" aria-label="Close">×</button>
-          </div>
-          <div class="mi-xp-body">
-            <div class="mi-xp-actions">
-              <button class="mi-xp-btn mi-download" type="button">⬇ Download .JSON</button>
-              <button class="mi-xp-btn primary mi-discord" type="button">💬 Send to Discord</button>
-            </div>
-            <div class="mi-xp-panel">
-              <label class="mi-xp-label">Channel</label>
-              <select class="mi-xp-select mi-channel"><option>Loading channels…</option></select>
-              <label class="mi-xp-label">Thread</label>
-              <select class="mi-xp-select mi-thread" disabled><option value="">No Thread — Post Directly to Channel</option></select>
-              <div class="mi-xp-status">Loading Discord destinations…</div>
-              <div class="mi-xp-foot">
-                <button class="mi-xp-btn mi-cancel" type="button">Cancel</button>
-                <button class="mi-xp-btn primary mi-send" type="button" disabled>Export to Discord</button>
-              </div>
-            </div>
-          </div>
-        </div>`;
-      document.body.appendChild(backdrop);
+  async function openExportPicker(filename, blob) {
+    if (modalOpen) return;
+    modalOpen = true;
 
-      const fileEl = backdrop.querySelector(".mi-xp-file");
-      const channelEl = backdrop.querySelector(".mi-channel");
-      const threadEl = backdrop.querySelector(".mi-thread");
-      const statusEl = backdrop.querySelector(".mi-xp-status");
-      const sendBtn = backdrop.querySelector(".mi-send");
-      fileEl.textContent = filename;
+    let payload = null;
+    try {
+      payload = JSON.parse(await blob.text());
+    } catch (err) {
+      modalOpen = false;
+      originalAlert("Could not read this JSON export. The normal download will be used instead.");
+      safeDownload(filename, blob);
+      return;
+    }
 
-      let destinations = { channels: [], threads: [] };
-      let finished = false;
-      const finish = (result) => {
-        if (finished) return;
-        finished = true;
-        backdrop.remove();
-        resolve(result);
-      };
-      const status = (text, kind = "") => {
-        statusEl.textContent = text;
-        statusEl.className = `mi-xp-status${kind ? " " + kind : ""}`;
-      };
-      const refreshThreads = () => {
-        const parentId = channelEl.value;
-        const lastThread = localStorage.getItem(LAST_THREAD_KEY) || "";
-        threadEl.innerHTML = "";
-        threadEl.appendChild(option("", "No Thread — Post Directly to Channel"));
-        destinations.threads.filter(t => t.parent_id === parentId).forEach(t => {
-          const o = option(t.id, t.name);
-          if (t.id === lastThread) o.selected = true;
-          threadEl.appendChild(o);
-        });
-        threadEl.disabled = false;
-      };
+    const overlay = el("div", { style: {
+      position: "fixed", inset: "0", zIndex: "2147483647", background: "rgba(0,0,0,.78)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+      fontFamily: "Arial, Helvetica, sans-serif", color: "#fff"
+    }});
 
-      backdrop.querySelector(".mi-xp-close").onclick = () => finish({ handled: true, cancelled: true });
-      backdrop.querySelector(".mi-cancel").onclick = () => finish({ handled: true, cancelled: true });
-      backdrop.querySelector(".mi-download").onclick = () => {
-        downloadJson(filename, payload);
-        finish({ handled: true, downloaded: true });
-      };
-      backdrop.querySelector(".mi-discord").onclick = () => channelEl.focus();
-      backdrop.addEventListener("click", e => { if (e.target === backdrop) finish({ handled: true, cancelled: true }); });
-      channelEl.addEventListener("change", () => {
-        localStorage.setItem(LAST_CHANNEL_KEY, channelEl.value);
-        refreshThreads();
+    const card = el("div", { style: {
+      width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", background: "#090b0d",
+      border: "2px solid #1eff00", borderRadius: "12px", padding: "20px",
+      boxShadow: "0 18px 70px rgba(0,0,0,.7)"
+    }});
+    overlay.appendChild(card);
+
+    const titleRow = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" } });
+    titleRow.appendChild(el("h2", { style: { margin: "0", color: "#1eff00", fontSize: "21px" } }, "Export Save"));
+    const closeBtn = el("button", { type: "button", style: {
+      border: "1px solid #555", background: "#16191c", color: "#fff", borderRadius: "6px",
+      width: "36px", height: "36px", cursor: "pointer", fontSize: "22px"
+    }}, "×");
+    closeBtn.addEventListener("click", function () { closeModal(overlay); });
+    titleRow.appendChild(closeBtn);
+    card.appendChild(titleRow);
+
+    card.appendChild(el("p", { style: { margin: "8px 0 16px", color: "#aeb6bf", overflowWrap: "anywhere" } }, filename));
+
+    const downloadBtn = el("button", { type: "button", style: {
+      width: "100%", padding: "12px", border: "1px solid #4a4f55", borderRadius: "7px",
+      background: "#171a1e", color: "#fff", fontWeight: "700", cursor: "pointer", marginBottom: "14px"
+    }}, "Download .JSON to Device");
+    downloadBtn.addEventListener("click", function () {
+      safeDownload(filename, blob);
+      closeModal(overlay);
+    });
+    card.appendChild(downloadBtn);
+
+    const divider = el("div", { style: { borderTop: "1px solid #2e3338", margin: "4px 0 16px" } });
+    card.appendChild(divider);
+    card.appendChild(el("h3", { style: { margin: "0 0 6px", fontSize: "16px" } }, "Send to Discord"));
+
+    const status = el("div", { style: { fontSize: "13px", color: "#aeb6bf", marginBottom: "12px" } }, "Checking Discord Activity authentication…");
+    card.appendChild(status);
+
+    const channelLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Channel");
+    const channelSelect = el("select", { style: {
+      width: "100%", marginTop: "6px", padding: "10px", background: "#111418", color: "#fff",
+      border: "1px solid #3b424a", borderRadius: "6px"
+    }, disabled: true });
+    channelLabel.appendChild(channelSelect);
+    card.appendChild(channelLabel);
+
+    const threadLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Thread (optional)");
+    const threadSelect = el("select", { style: {
+      width: "100%", marginTop: "6px", padding: "10px", background: "#111418", color: "#fff",
+      border: "1px solid #3b424a", borderRadius: "6px"
+    }, disabled: true });
+    threadLabel.appendChild(threadSelect);
+    card.appendChild(threadLabel);
+
+    const sendBtn = el("button", { type: "button", disabled: true, style: {
+      width: "100%", padding: "12px", border: "0", borderRadius: "7px", background: "#1eff00",
+      color: "#020302", fontWeight: "800", cursor: "pointer"
+    }}, "Send JSON to Discord");
+    card.appendChild(sendBtn);
+
+    const hint = el("div", { style: { marginTop: "10px", color: "#7f8993", fontSize: "12px", lineHeight: "1.45" } },
+      "Only channels you can access are listed. Forum channels require an active thread. Private/archived threads are not listed.");
+    card.appendChild(hint);
+
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) closeModal(overlay);
+    });
+    document.body.appendChild(overlay);
+
+    const ctx = await waitForDiscord();
+    if (!ctx.token || !ctx.guildId) {
+      status.textContent = window.miDiscordActivity
+        ? "Discord authentication is not ready. Close and reopen the Activity, then try again."
+        : "Send to Discord is available when the Tactical Centre is launched as a Discord Activity.";
+      status.style.color = "#ffb454";
+      return;
+    }
+
+    status.textContent = "Loading server channels and active threads…";
+
+    try {
+      const response = await fetch(`/api/discord-destinations?guild_id=${encodeURIComponent(ctx.guildId)}`, {
+        headers: { Authorization: `Bearer ${ctx.token}` }
       });
-      threadEl.addEventListener("change", () => localStorage.setItem(LAST_THREAD_KEY, threadEl.value));
+      const result = await response.json().catch(function () { return {}; });
+      if (!response.ok) throw new Error(result.error || "Could not load Discord destinations.");
 
-      sendBtn.onclick = async () => {
-        const channelId = channelEl.value;
-        const threadId = threadEl.value;
-        const destinationId = threadId || channelId;
-        if (!destinationId) return;
+      const channels = Array.isArray(result.channels) ? result.channels : [];
+      const threads = Array.isArray(result.threads) ? result.threads : [];
+
+      channelSelect.innerHTML = "";
+      channelSelect.appendChild(el("option", { value: "" }, "Select a channel…"));
+      for (const channel of channels) {
+        const prefix = channel.type === 15 ? "Forum: " : "# ";
+        channelSelect.appendChild(el("option", { value: channel.id }, prefix + channel.name));
+      }
+      channelSelect.disabled = channels.length === 0;
+
+      function refreshThreads() {
+        const selected = channels.find(function (c) { return c.id === channelSelect.value; });
+        const matching = threads.filter(function (t) { return t.parent_id === channelSelect.value; });
+        threadSelect.innerHTML = "";
+
+        if (!selected) {
+          threadSelect.appendChild(el("option", { value: "" }, "Select a channel first"));
+          threadSelect.disabled = true;
+          sendBtn.disabled = true;
+          return;
+        }
+
+        if (selected.type !== 15 && selected.can_send) {
+          threadSelect.appendChild(el("option", { value: "" }, "No Thread — post directly to channel"));
+        } else {
+          threadSelect.appendChild(el("option", { value: "" }, matching.length ? "Select a thread…" : "No active threads available"));
+        }
+
+        for (const thread of matching) {
+          threadSelect.appendChild(el("option", { value: thread.id }, thread.name));
+        }
+
+        threadSelect.disabled = matching.length === 0 && selected.type === 15;
+        sendBtn.disabled = selected.type === 15 ? !threadSelect.value : false;
+      }
+
+      channelSelect.addEventListener("change", refreshThreads);
+      threadSelect.addEventListener("change", function () {
+        const selected = channels.find(function (c) { return c.id === channelSelect.value; });
+        sendBtn.disabled = !selected || (selected.type === 15 && !threadSelect.value);
+      });
+
+      sendBtn.addEventListener("click", async function () {
+        const selected = channels.find(function (c) { return c.id === channelSelect.value; });
+        if (!selected) return;
+        const destinationId = threadSelect.value || selected.id;
+        if (selected.type === 15 && !threadSelect.value) {
+          status.textContent = "Forum channels require a thread selection.";
+          status.style.color = "#ffb454";
+          return;
+        }
+
         sendBtn.disabled = true;
-        channelEl.disabled = true;
-        threadEl.disabled = true;
-        status("Uploading JSON to Discord…");
+        channelSelect.disabled = true;
+        threadSelect.disabled = true;
+        status.textContent = "Uploading JSON to Discord…";
+        status.style.color = "#aeb6bf";
+
         try {
-          const r = await fetch("/api/discord-export", {
+          const response = await fetch("/api/discord-export", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${ctx.accessToken}`,
+              Authorization: `Bearer ${ctx.token}`
             },
-            body: JSON.stringify({ guild_id: ctx.guildId, destination_id: destinationId, filename, payload }),
+            body: JSON.stringify({
+              guild_id: ctx.guildId,
+              destination_id: destinationId,
+              filename,
+              payload
+            })
           });
-          const data = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(data.error || `Discord export failed (${r.status})`);
-          status(threadId ? "Export sent to the selected Discord thread." : "Export sent to the selected Discord channel.", "ok");
-          setTimeout(() => finish({ handled: true, sent: true, data }), 900);
-        } catch (err) {
-          status(err?.message || "Discord export failed.", "error");
-          sendBtn.disabled = false;
-          channelEl.disabled = false;
-          threadEl.disabled = false;
-        }
-      };
+          const result = await response.json().catch(function () { return {}; });
+          if (!response.ok) throw new Error(result.error || "Discord export failed.");
 
-      (async () => {
-        try {
-          const r = await fetch(`/api/discord-destinations?guild_id=${encodeURIComponent(ctx.guildId)}`, {
-            headers: { Authorization: `Bearer ${ctx.accessToken}` },
-          });
-          const data = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(data.error || `Could not load channels (${r.status})`);
-          destinations = data;
-          channelEl.innerHTML = "";
-          const lastChannel = localStorage.getItem(LAST_CHANNEL_KEY) || "";
-          destinations.channels.forEach(c => {
-            const o = option(c.id, `# ${c.name}`);
-            if (c.id === lastChannel) o.selected = true;
-            channelEl.appendChild(o);
-          });
-          if (!destinations.channels.length) {
-            channelEl.appendChild(option("", "No available text channels"));
-            status("The bot cannot find any usable text channels in this server.", "error");
-            return;
-          }
-          refreshThreads();
-          sendBtn.disabled = false;
-          status("Choose a channel and optional active thread.");
+          status.textContent = "Export sent to Discord successfully.";
+          status.style.color = "#1eff00";
+          sendBtn.textContent = "Sent ✓";
+          window.setTimeout(function () { closeModal(overlay); }, 900);
         } catch (err) {
-          channelEl.innerHTML = "";
-          channelEl.appendChild(option("", "Discord destinations unavailable"));
-          status(err?.message || "Could not load Discord destinations.", "error");
+          status.textContent = err instanceof Error ? err.message : String(err);
+          status.style.color = "#ff5b5b";
+          sendBtn.disabled = false;
+          channelSelect.disabled = false;
+          refreshThreads();
         }
-      })();
-    });
+      });
+
+      status.textContent = channels.length
+        ? "Choose the server channel, then choose a thread if needed."
+        : "No Discord channels are available to you and the Tactical Centre bot.";
+      status.style.color = channels.length ? "#aeb6bf" : "#ffb454";
+    } catch (err) {
+      status.textContent = err instanceof Error ? err.message : String(err);
+      status.style.color = "#ff5b5b";
+    }
   }
 
-  window.miExportJson = showExportDialog;
+  HTMLAnchorElement.prototype.click = function () {
+    try {
+      const filename = String(this.download || "");
+      const href = String(this.href || "");
+      const blob = blobByUrl.get(href);
+      if (filename && /\.json$/i.test(filename) && blob && /application\/json/i.test(blob.type || "application/json")) {
+        suppressNextDownloadAlert = true;
+        openExportPicker(filename, blob);
+        return;
+      }
+    } catch (err) {
+      console.error("[1st MI] Export picker interception failed:", err);
+    }
+    return nativeAnchorClick.call(this);
+  };
 })();
