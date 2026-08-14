@@ -1,53 +1,57 @@
-1st M.I. Tactical Centre — Web / Discord Activity Export Setup
-===============================================================
+1st M.I. Tactical Centre — Web / Discord Activity Export v1.5.5
+================================================================
 
 THIS ZIP IS THE GITHUB / VERCEL WEB BUILD.
 The desktop / Microsoft Store app keeps its existing licence-key system.
 The web build does NOT require or validate a licence key.
 
+What changed in v1.5.5
+----------------------
+The Discord channel/thread exporter no longer depends on browser-side Discord OAuth or a CDN-loaded Embedded App SDK.
+
+Instead it uses the Discord Activity instance_id supplied when Discord launches the Activity. Vercel verifies that instance with Discord's Activity Instance API using the bot token, determines which server the Activity is running in, then lists destinations the Tactical Centre bot can actually post JSON files to.
+
+This fixes the issue where the Activity was visibly running inside Discord but the exporter said "Send to Discord is available when the Tactical Centre is launched as a Discord Activity" and left Channel / Thread blank.
+
 Required Vercel Environment Variables
 -------------------------------------
 DISCORD_CLIENT_ID=1532302380237066271
-DISCORD_CLIENT_SECRET=<your Discord application client secret>
 DISCORD_BOT_TOKEN=<bot token for the same Discord application>
+
+DISCORD_CLIENT_SECRET can remain configured, but v1.5.5's JSON exporter does not require it.
 
 After adding/changing variables, redeploy the Vercel project.
 
 Discord application / bot requirements
 --------------------------------------
 1. The application must be configured as a Discord Activity.
-2. The bot must be installed in the server where exports will be sent.
-3. Give the bot permissions for the destinations you want to use:
+2. The bot must be installed in the server where the Activity is launched.
+3. Give the bot permissions in destinations you want shown:
    - View Channel
    - Send Messages
    - Attach Files
    - Send Messages in Threads (for thread exports)
-4. Users launching the Activity will be asked for Discord OAuth scopes used to verify their own server/channel access.
+4. Forum/media channels require an active public thread.
+5. Private and archived threads are intentionally not listed.
 
 Export behaviour
 ----------------
-When an existing Tactical Centre "Export Save" action creates a JSON download,
-this web package opens an Export Save picker instead:
-
+Export Save ->
 - Download .JSON to Device
 - Send to Discord
-  - Select Channel
-  - Select active Thread (optional for text channels; required for forum channels)
+  - server is detected from the active Discord Activity instance
+  - select Channel
+  - select active Thread when wanted/required
 
 The JSON payload itself is not changed.
 
 Security
 --------
 - DISCORD_BOT_TOKEN stays in Vercel environment variables and is never placed in browser JavaScript.
-- Discord user access tokens are kept in page memory only.
-- The destination API filters channels using the authenticated user's Discord permissions.
+- Every destination-list request and every upload verifies the active Discord Activity instance on the Vercel backend.
+- A destination must belong to the same server where the verified Activity instance is running.
+- The server only lists channels where the bot has the required posting/file permissions.
 
-Files added/updated
--------------------
-web-compat.js                  Web-only licence bypass. Does not affect desktop builds.
-discord-activity.js            Discord Activity OAuth/authentication bootstrap.
-discord-export.js              Web export destination picker.
-api/discord-destinations.js    Lists selectable Discord channels/active threads.
-api/discord-export.js          Uploads the JSON file through the Discord bot.
-api/token.js                   Exchanges Activity OAuth codes on Vercel.
-index.html                     Loads the web-only compatibility/export scripts before the app bundle.
+Cache note
+----------
+v1.5.5 adds cache-busting query strings and no-store headers for the helper scripts so Discord's Activity proxy does not keep serving the older exporter code after redeployment.

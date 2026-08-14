@@ -1,68 +1,61 @@
-(async function () {
+(function () {
   "use strict";
 
-  const CLIENT_ID = "1532302380237066271";
-  const isDiscord =
-    window.location.hostname.includes("discordsays.com") ||
-    window.location.search.includes("frame_id") ||
-    window.location.search.includes("instance_id");
+  function getParam(name) {
+    try {
+      const direct = new URLSearchParams(window.location.search).get(name);
+      if (direct) return direct;
+    } catch (_) {}
 
-  window.miDiscordReady = Promise.resolve(null);
+    try {
+      const hash = String(window.location.hash || "");
+      const queryIndex = hash.indexOf("?");
+      if (queryIndex >= 0) {
+        const value = new URLSearchParams(hash.slice(queryIndex + 1)).get(name);
+        if (value) return value;
+      }
+    } catch (_) {}
 
-  if (!isDiscord) {
-    window.miDiscordActivity = false;
-    return;
+    try {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = String(window.location.href || "").match(new RegExp("(?:[?&#])" + escaped + "=([^&#]+)", "i"));
+      if (match && match[1]) return decodeURIComponent(match[1]);
+    } catch (_) {}
+
+    return null;
   }
 
-  window.miDiscordActivity = true;
+  const instanceId = getParam("instance_id");
+  const frameId = getParam("frame_id");
+  const hostname = String(window.location.hostname || "").toLowerCase();
+  const referrer = String(document.referrer || "").toLowerCase();
+  const inFrame = window.parent !== window;
 
-  const readyPromise = (async function () {
-    try {
-      const { DiscordSDK } = await import("https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2/+esm");
-      const discordSdk = new DiscordSDK(CLIENT_ID);
-      window.miDiscordSdk = discordSdk;
+  const isDiscord = Boolean(
+    instanceId ||
+    frameId ||
+    hostname.endsWith(".discordsays.com") ||
+    hostname === "discordsays.com" ||
+    referrer.includes("discord.com") ||
+    referrer.includes("discordapp.com") ||
+    inFrame
+  );
 
-      await discordSdk.ready();
+  window.miDiscordActivity = isDiscord;
+  window.miDiscordInstanceId = instanceId || null;
+  window.miDiscordFrameId = frameId || null;
+  window.miDiscordReady = Promise.resolve({
+    activity: isDiscord,
+    instance_id: instanceId || null,
+    frame_id: frameId || null
+  });
 
-      const { code } = await discordSdk.commands.authorize({
-        client_id: CLIENT_ID,
-        response_type: "code",
-        state: "",
-        prompt: "none",
-        scope: ["identify", "guilds", "guilds.members.read"]
-      });
-
-      const tokenRes = await fetch("/api/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code })
-      });
-
-      if (!tokenRes.ok) {
-        const text = await tokenRes.text();
-        throw new Error("Token exchange failed: " + text);
+  if (isDiscord) {
+    window.dispatchEvent(new CustomEvent("mi-discord-ready", {
+      detail: {
+        instance_id: instanceId || null,
+        frame_id: frameId || null
       }
-
-      const { access_token } = await tokenRes.json();
-      if (!access_token) throw new Error("No Discord access token returned.");
-
-      const auth = await discordSdk.commands.authenticate({ access_token });
-      if (!auth) throw new Error("Discord authenticate command failed.");
-
-      // AuthenticateResponse already contains access_token. Keep it only in memory.
-      window.miDiscordAuth = auth;
-      window.miDiscordGuildId = discordSdk.guildId || null;
-      window.miDiscordChannelId = discordSdk.channelId || null;
-
-      window.dispatchEvent(new CustomEvent("mi-discord-ready", { detail: auth }));
-      return auth;
-    } catch (err) {
-      console.error("[1st MI] Discord setup failed:", err);
-      window.miDiscordError = err instanceof Error ? err.message : String(err);
-      window.dispatchEvent(new CustomEvent("mi-discord-error", { detail: window.miDiscordError }));
-      return null;
-    }
-  })();
-
-  window.miDiscordReady = readyPromise;
+    }));
+  }
 })();

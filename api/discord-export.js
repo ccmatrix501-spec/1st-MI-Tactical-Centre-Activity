@@ -2,13 +2,15 @@ const API = "https://discord.com/api/v10";
 
 const VIEW_CHANNEL = 1n << 10n;
 const SEND_MESSAGES = 1n << 11n;
+const ATTACH_FILES = 1n << 15n;
 const ADMINISTRATOR = 1n << 3n;
 const SEND_MESSAGES_IN_THREADS = 1n << 38n;
 
 function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Cache-Control", "no-store");
 }
 
 async function discordJson(url, auth, options = {}) {
@@ -24,6 +26,10 @@ async function discordJson(url, auth, options = {}) {
 
 function bits(value) {
   try { return BigInt(String(value || "0")); } catch { return 0n; }
+}
+
+function has(perms, permission) {
+  return (perms & permission) === permission;
 }
 
 function effectiveChannelPermissions(channel, guildId, member, roles) {
@@ -63,10 +69,6 @@ function effectiveChannelPermissions(channel, guildId, member, roles) {
   return permissions;
 }
 
-function has(perms, permission) {
-  return (perms & permission) === permission;
-}
-
 function safeFilename(value) {
   const cleaned = String(value || "Tactical-Centre-Export.json")
     .replace(/[\\/:*?"<>|\u0000-\u001F]/g, "-")
@@ -76,69 +78,122 @@ function safeFilename(value) {
   return (/\.json$/i.test(cleaned) ? cleaned : `${cleaned}.json`) || "Tactical-Centre-Export.json";
 }
 
+function validInstanceId(value) {
+  const text = String(value || "");
+  return text.length >= 8 && text.length <= 220 && /^[A-Za-z0-9._:-]+$/.test(text);
+}
+
+async function resolveActivityInstance(instanceId, clientId, botToken) {
+  const result = await discordJson(
+    `${API}/applications/${encodeURIComponent(clientId)}/activity-instances/${encodeURIComponent(instanceId)}`,
+    `Bot ${botToken}`
+  );
+
+  if (!result.ok) {
+    return { ok: false, status: result.status, error: "Discord could not verify this Activity session. Close the Activity and launch it again." };
+  }
+
+  if (String(result.data?.application_id || "") !== String(clientId)) {
+    return { ok: false, status: 403, error: "This Activity session belongs to a different Discord application." };
+  }
+
+  const guildId = String(result.data?.location?.guild_id || "");
+  if (!/^\d{16,22}$/.test(guildId)) {
+    return { ok: false, status: 400, error: "Discord export is only available when the Activity is launched inside a server channel." };
+  }
+
+  return { ok: true, guildId, data: result.data };
+}
+
+function exportSummary(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  const lines = [];
+  const saveType = payload.certificationType || payload.saveType || payload.type;
+  const trainee = payload.traineeName || payload.candidate || payload.recipient || payload.info?.["Trainee Name"] || payload.info?.Candidate;
+  const trainer = payload.trainerName || payload.presentedBy || payload.info?.["Trainer Name"];
+  const company = payload.traineeCompany || payload.company || payload.info?.["Trainee Company"];
+  if (saveType) lines.push(`**Type:** ${String(saveType)}`);
+  if (trainee) lines.push(`**Trainee/Recipient:** ${String(trainee)}`);
+  if (trainer) lines.push(`**Trainer/Presenter:** ${String(trainer)}`);
+  if (company) lines.push(`**Company:** ${String(company)}`);
+  return lines.slice(0, 4);
+}
+
 export default async function handler(req, res) {
   cors(res);
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const auth = req.headers.authorization || "";
-  const accessToken = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   const botToken = process.env.DISCORD_BOT_TOKEN;
-  const { guild_id, destination_id, filename, payload } = req.body || {};
-  const guildId = String(guild_id || "");
+  const clientId = String(process.env.DISCORD_CLIENT_ID || "1532302380237066271");
+  const { instance_id, destination_id, filename, payload } = req.body || {};
+  const instanceId = String(instance_id || "");
   const destinationId = String(destination_id || "");
 
-  if (!accessToken) return res.status(401).json({ error: "Discord user authentication is required." });
   if (!botToken) return res.status(500).json({ error: "Missing DISCORD_BOT_TOKEN on Vercel." });
-  if (!/^\d{16,22}$/.test(guildId) || !/^\d{16,22}$/.test(destinationId)) {
-    return res.status(400).json({ error: "Invalid Discord destination." });
-  }
+  if (!/^\d{16,22}$/.test(clientId)) return res.status(500).json({ error: "Invalid DISCORD_CLIENT_ID on Vercel." });
+  if (!validInstanceId(instanceId)) return res.status(400).json({ error: "No valid Discord Activity instance was supplied." });
+  if (!/^\d{16,22}$/.test(destinationId)) return res.status(400).json({ error: "Invalid Discord destination." });
   if (payload === undefined) return res.status(400).json({ error: "No JSON payload provided." });
 
-  const [meRes, memberRes, destinationRes, channelsRes, rolesRes] = await Promise.all([
-    discordJson(`${API}/users/@me`, `Bearer ${accessToken}`),
-    discordJson(`${API}/users/@me/guilds/${guildId}/member`, `Bearer ${accessToken}`),
+  const instance = await resolveActivityInstance(instanceId, clientId, botToken);
+  if (!instance.ok) return res.status(instance.status || 403).json({ error: instance.error });
+  const guildId = instance.guildId;
+
+  const [botUserRes, destinationRes, channelsRes, rolesRes] = await Promise.all([
+    discordJson(`${API}/users/@me`, `Bot ${botToken}`),
     discordJson(`${API}/channels/${destinationId}`, `Bot ${botToken}`),
     discordJson(`${API}/guilds/${guildId}/channels`, `Bot ${botToken}`),
     discordJson(`${API}/guilds/${guildId}/roles`, `Bot ${botToken}`)
   ]);
 
-  if (!meRes.ok || !memberRes.ok) {
-    return res.status(403).json({ error: "You are not an authenticated member of this Discord server." });
-  }
-  memberRes.data.user = memberRes.data.user || meRes.data;
+  if (!botUserRes.ok) return res.status(403).json({ error: "The Tactical Centre bot token is invalid." });
 
-  if (!destinationRes.ok || destinationRes.data?.guild_id !== guildId) {
-    return res.status(403).json({ error: "That channel/thread is not available to the Tactical Centre bot." });
+  const botMemberRes = await discordJson(
+    `${API}/guilds/${guildId}/members/${botUserRes.data.id}`,
+    `Bot ${botToken}`
+  );
+
+  if (!botMemberRes.ok) return res.status(403).json({ error: "The Tactical Centre bot is not installed in this server." });
+
+  if (!destinationRes.ok || String(destinationRes.data?.guild_id || "") !== guildId) {
+    return res.status(403).json({ error: "That channel/thread is not in the server where this Activity is running." });
   }
   if (!channelsRes.ok || !rolesRes.ok) {
-    return res.status(403).json({ error: "The Tactical Centre bot could not verify channel permissions." });
+    return res.status(403).json({ error: "The Tactical Centre bot could not verify its Discord permissions." });
   }
+
+  botMemberRes.data.user = botMemberRes.data.user || botUserRes.data;
 
   const destinationType = Number(destinationRes.data?.type);
   if (![0, 5, 10, 11].includes(destinationType)) {
-    return res.status(400).json({ error: "That Discord destination cannot receive this export. Select a text channel or an active public/news thread." });
+    return res.status(400).json({ error: "Select a text channel or an active public/announcement thread." });
   }
 
   const allChannels = Array.isArray(channelsRes.data) ? channelsRes.data : [];
   const roles = Array.isArray(rolesRes.data) ? rolesRes.data : [];
-  const permissionChannel = destinationType === 10 || destinationType === 11
+  const isThread = destinationType === 10 || destinationType === 11;
+  const permissionChannel = isThread
     ? allChannels.find((c) => c.id === destinationRes.data?.parent_id)
     : allChannels.find((c) => c.id === destinationId);
 
   if (!permissionChannel) {
-    return res.status(403).json({ error: "Could not verify your permissions for that Discord destination." });
+    return res.status(403).json({ error: "Could not verify the bot's permissions for that Discord destination." });
   }
 
-  const perms = effectiveChannelPermissions(permissionChannel, guildId, memberRes.data, roles);
-  const maySend = has(perms, VIEW_CHANNEL) && (
-    destinationType === 10 || destinationType === 11
-      ? has(perms, SEND_MESSAGES_IN_THREADS)
-      : has(perms, SEND_MESSAGES)
+  const perms = effectiveChannelPermissions(permissionChannel, guildId, botMemberRes.data, roles);
+  const maySend = has(perms, VIEW_CHANNEL) && has(perms, ATTACH_FILES) && (
+    isThread ? has(perms, SEND_MESSAGES_IN_THREADS) : has(perms, SEND_MESSAGES)
   );
 
   if (!maySend) {
-    return res.status(403).json({ error: "You do not have permission to send exports to that Discord channel/thread." });
+    return res.status(403).json({
+      error: "The Tactical Centre bot needs View Channel, Attach Files, and the appropriate Send Messages permission for that destination."
+    });
+  }
+
+  if (isThread && (destinationRes.data?.thread_metadata?.archived || destinationRes.data?.thread_metadata?.locked)) {
+    return res.status(400).json({ error: "That Discord thread is archived or locked. Choose an active thread." });
   }
 
   const outputName = safeFilename(filename);
@@ -149,7 +204,7 @@ export default async function handler(req, res) {
 
   const content = [
     "**1st M.I. Tactical Centre Export**",
-    `**Exported by:** ${meRes.data?.global_name || meRes.data?.username || "Discord user"}`,
+    ...exportSummary(payload),
     `📎 ${outputName}`
   ].join("\n");
 

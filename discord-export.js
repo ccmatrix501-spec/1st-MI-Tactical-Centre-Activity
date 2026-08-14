@@ -61,29 +61,56 @@
     modalOpen = false;
   }
 
-  function getDiscordContext() {
-    const auth = window.miDiscordAuth;
-    const sdk = window.miDiscordSdk;
-    const token = auth && auth.access_token;
-    const guildId = (sdk && sdk.guildId) || window.miDiscordGuildId;
-    return { auth, sdk, token, guildId };
-  }
-
-  async function waitForDiscord() {
+  function getUrlParam(name) {
     try {
-      // discord-activity.js is loaded after the main document, so give it a moment
-      // to create the authentication promise if Export is clicked immediately.
-      for (let i = 0; i < 50 && !window.miDiscordReady; i += 1) {
-        await new Promise(function (resolve) { window.setTimeout(resolve, 100); });
-      }
-      if (window.miDiscordReady && typeof window.miDiscordReady.then === "function") {
-        await Promise.race([
-          window.miDiscordReady,
-          new Promise(function (resolve) { window.setTimeout(resolve, 5000); })
-        ]);
+      const value = new URLSearchParams(window.location.search).get(name);
+      if (value) return value;
+    } catch (_) {}
+
+    try {
+      const hash = String(window.location.hash || "");
+      const queryIndex = hash.indexOf("?");
+      if (queryIndex >= 0) {
+        const value = new URLSearchParams(hash.slice(queryIndex + 1)).get(name);
+        if (value) return value;
       }
     } catch (_) {}
-    return getDiscordContext();
+
+    try {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = String(window.location.href || "").match(new RegExp("(?:[?&#])" + escaped + "=([^&#]+)", "i"));
+      if (match && match[1]) return decodeURIComponent(match[1]);
+    } catch (_) {}
+
+    return null;
+  }
+
+  function getActivityContext() {
+    const instanceId = window.miDiscordInstanceId || getUrlParam("instance_id");
+    const frameId = window.miDiscordFrameId || getUrlParam("frame_id");
+    const hostname = String(window.location.hostname || "").toLowerCase();
+    const referrer = String(document.referrer || "").toLowerCase();
+    const inFrame = window.parent !== window;
+    const isDiscord = Boolean(
+      window.miDiscordActivity ||
+      instanceId ||
+      frameId ||
+      hostname.endsWith(".discordsays.com") ||
+      hostname === "discordsays.com" ||
+      referrer.includes("discord.com") ||
+      referrer.includes("discordapp.com") ||
+      inFrame
+    );
+    return { instanceId, frameId, isDiscord };
+  }
+
+  async function waitForActivityContext() {
+    for (let i = 0; i < 25; i += 1) {
+      const ctx = getActivityContext();
+      if (ctx.instanceId) return ctx;
+      await new Promise(function (resolve) { window.setTimeout(resolve, 100); });
+    }
+    return getActivityContext();
   }
 
   async function openExportPicker(filename, blob) {
@@ -139,7 +166,7 @@
     card.appendChild(divider);
     card.appendChild(el("h3", { style: { margin: "0 0 6px", fontSize: "16px" } }, "Send to Discord"));
 
-    const status = el("div", { style: { fontSize: "13px", color: "#aeb6bf", marginBottom: "12px" } }, "Checking Discord Activity authentication…");
+    const status = el("div", { style: { fontSize: "13px", color: "#aeb6bf", marginBottom: "12px" } }, "Checking Discord Activity session…");
     card.appendChild(status);
 
     const channelLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Channel");
@@ -165,7 +192,7 @@
     card.appendChild(sendBtn);
 
     const hint = el("div", { style: { marginTop: "10px", color: "#7f8993", fontSize: "12px", lineHeight: "1.45" } },
-      "Only channels you can access are listed. Forum channels require an active thread. Private/archived threads are not listed.");
+      "Only channels the Tactical Centre bot can post JSON files to are listed. Forum channels require an active thread. Private/archived threads are not listed.");
     card.appendChild(hint);
 
     overlay.addEventListener("click", function (event) {
@@ -173,32 +200,36 @@
     });
     document.body.appendChild(overlay);
 
-    const ctx = await waitForDiscord();
-    if (!ctx.token || !ctx.guildId) {
-      status.textContent = window.miDiscordActivity
-        ? "Discord authentication is not ready. Close and reopen the Activity, then try again."
+    const ctx = await waitForActivityContext();
+    if (!ctx.instanceId) {
+      status.textContent = ctx.isDiscord
+        ? "Discord Activity detected, but its instance ID was not found. Close the Activity completely and launch it again."
         : "Send to Discord is available when the Tactical Centre is launched as a Discord Activity.";
       status.style.color = "#ffb454";
       return;
     }
 
-    status.textContent = "Loading server channels and active threads…";
+    status.textContent = "Verifying this Discord Activity and loading server channels…";
 
     try {
-      const response = await fetch(`/api/discord-destinations?guild_id=${encodeURIComponent(ctx.guildId)}`, {
-        headers: { Authorization: `Bearer ${ctx.token}` }
+      const response = await fetch(`/api/discord-destinations?instance_id=${encodeURIComponent(ctx.instanceId)}`, {
+        headers: { "Accept": "application/json" },
+        cache: "no-store"
       });
       const result = await response.json().catch(function () { return {}; });
       if (!response.ok) throw new Error(result.error || "Could not load Discord destinations.");
 
       const channels = Array.isArray(result.channels) ? result.channels : [];
       const threads = Array.isArray(result.threads) ? result.threads : [];
+      const guildName = result.guild_name || "Discord server";
 
       channelSelect.innerHTML = "";
       channelSelect.appendChild(el("option", { value: "" }, "Select a channel…"));
       for (const channel of channels) {
-        const prefix = channel.type === 15 ? "Forum: " : "# ";
-        channelSelect.appendChild(el("option", { value: channel.id }, prefix + channel.name));
+        const forumLike = channel.type === 15 || channel.type === 16;
+        const prefix = forumLike ? "Forum: " : "# ";
+        const category = channel.category ? channel.category + " / " : "";
+        channelSelect.appendChild(el("option", { value: channel.id }, category + prefix + channel.name));
       }
       channelSelect.disabled = channels.length === 0;
 
@@ -214,7 +245,10 @@
           return;
         }
 
-        if (selected.type !== 15 && selected.can_send) {
+        const forumLike = selected.type === 15 || selected.type === 16;
+        const directAllowed = !forumLike && !!selected.can_send;
+
+        if (directAllowed) {
           threadSelect.appendChild(el("option", { value: "" }, "No Thread — post directly to channel"));
         } else {
           threadSelect.appendChild(el("option", { value: "" }, matching.length ? "Select a thread…" : "No active threads available"));
@@ -224,22 +258,32 @@
           threadSelect.appendChild(el("option", { value: thread.id }, thread.name));
         }
 
-        threadSelect.disabled = matching.length === 0 && selected.type === 15;
-        sendBtn.disabled = selected.type === 15 ? !threadSelect.value : false;
+        threadSelect.disabled = !directAllowed && matching.length === 0;
+        sendBtn.disabled = directAllowed ? false : !threadSelect.value;
       }
 
       channelSelect.addEventListener("change", refreshThreads);
       threadSelect.addEventListener("change", function () {
         const selected = channels.find(function (c) { return c.id === channelSelect.value; });
-        sendBtn.disabled = !selected || (selected.type === 15 && !threadSelect.value);
+        if (!selected) {
+          sendBtn.disabled = true;
+          return;
+        }
+        const forumLike = selected.type === 15 || selected.type === 16;
+        const directAllowed = !forumLike && !!selected.can_send;
+        sendBtn.disabled = directAllowed ? false : !threadSelect.value;
       });
 
       sendBtn.addEventListener("click", async function () {
         const selected = channels.find(function (c) { return c.id === channelSelect.value; });
         if (!selected) return;
+        const forumLike = selected.type === 15 || selected.type === 16;
+        const directAllowed = !forumLike && !!selected.can_send;
         const destinationId = threadSelect.value || selected.id;
-        if (selected.type === 15 && !threadSelect.value) {
-          status.textContent = "Forum channels require a thread selection.";
+        if (!directAllowed && !threadSelect.value) {
+          status.textContent = forumLike
+            ? "Forum channels require a thread selection."
+            : "The bot can only post to a thread in this channel. Select an active thread.";
           status.style.color = "#ffb454";
           return;
         }
@@ -254,11 +298,11 @@
           const response = await fetch("/api/discord-export", {
             method: "POST",
             headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${ctx.token}`
+              "Content-Type": "application/json"
             },
+            cache: "no-store",
             body: JSON.stringify({
-              guild_id: ctx.guildId,
+              instance_id: ctx.instanceId,
               destination_id: destinationId,
               filename,
               payload
@@ -281,8 +325,8 @@
       });
 
       status.textContent = channels.length
-        ? "Choose the server channel, then choose a thread if needed."
-        : "No Discord channels are available to you and the Tactical Centre bot.";
+        ? `Connected to ${guildName}. Choose a channel, then a thread if needed.`
+        : "No Discord channels are available to the Tactical Centre bot in this server.";
       status.style.color = channels.length ? "#aeb6bf" : "#ffb454";
     } catch (err) {
       status.textContent = err instanceof Error ? err.message : String(err);
