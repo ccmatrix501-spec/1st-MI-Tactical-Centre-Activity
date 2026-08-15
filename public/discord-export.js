@@ -268,7 +268,7 @@
     card.appendChild(sendBtn);
 
     const hint = el("div", { style: { marginTop: "10px", color: "#7f8993", fontSize: "12px", lineHeight: "1.45" } },
-      "Only channels the Tactical Centre bot can post JSON files to are listed. Forum channels require an active thread. Private/archived threads are not listed.");
+      "Shows active and archived threads the Tactical Centre bot can access. Archived thread listing requires Read Message History. All private threads require Manage Threads; otherwise only private threads the bot has joined can appear.");
     card.appendChild(hint);
 
     overlay.addEventListener("click", function (event) {
@@ -288,7 +288,8 @@
     status.textContent = "Verifying this Discord Activity and loading server channels…";
 
     try {
-      const response = await fetch(`/api/discord-destinations?instance_id=${encodeURIComponent(ctx.instanceId)}`, {
+      const channelQuery = ALLOWED_CHANNEL_IDS.length ? `&channel_ids=${encodeURIComponent(ALLOWED_CHANNEL_IDS.join(","))}` : "";
+      const response = await fetch(`/api/discord-destinations?instance_id=${encodeURIComponent(ctx.instanceId)}${channelQuery}`, {
         headers: { "Accept": "application/json" },
         cache: "no-store"
       });
@@ -332,12 +333,15 @@
         } else {
           threadOptionsCache.push({
             value: "",
-            label: matching.length ? "Select a thread…" : "No active threads available"
+            label: matching.length ? "Select a thread…" : "No accessible threads available"
           });
         }
 
         for (const thread of matching) {
-          threadOptionsCache.push({ value: thread.id, label: thread.name });
+          const state = thread.archived ? " — Archived" : " — Active";
+          const privacy = thread.private ? " — Private" : "";
+          const locked = thread.locked ? " — Locked" : "";
+          threadOptionsCache.push({ value: thread.id, label: thread.name + state + privacy + locked });
         }
 
         applyThreadFilter();
@@ -368,7 +372,7 @@
         if (!directAllowed && !threadSelect.value) {
           status.textContent = forumLike
             ? "Forum channels require a thread selection."
-            : "The bot can only post to a thread in this channel. Select an active thread.";
+            : "The bot can only post to a thread in this channel. Select a thread.";
           status.style.color = "#ffb454";
           return;
         }
@@ -410,10 +414,12 @@
         }
       });
 
+      const warnings = Array.isArray(result.thread_warnings) ? result.thread_warnings : [];
       status.textContent = channels.length
-        ? `Connected to ${guildName}. Choose a channel, then a thread if needed.`
+        ? `Connected to ${guildName}. Loaded ${threads.length} accessible thread${threads.length === 1 ? "" : "s"}.` +
+          (warnings.length ? ` ${warnings[0]}` : " Choose a channel, then a thread if needed.")
         : "No Discord channels are available to the Tactical Centre bot in this server.";
-      status.style.color = channels.length ? "#aeb6bf" : "#ffb454";
+      status.style.color = channels.length ? (warnings.length ? "#ffb454" : "#aeb6bf") : "#ffb454";
     } catch (err) {
       status.textContent = err instanceof Error ? err.message : String(err);
       status.style.color = "#ff5b5b";

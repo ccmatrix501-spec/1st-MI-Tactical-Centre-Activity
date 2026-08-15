@@ -1,1 +1,1 @@
-1.6.0-source-vite-discord-activity
+1.6.1

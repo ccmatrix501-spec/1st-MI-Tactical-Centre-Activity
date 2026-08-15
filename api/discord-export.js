@@ -4,6 +4,7 @@ const VIEW_CHANNEL = 1n << 10n;
 const SEND_MESSAGES = 1n << 11n;
 const ATTACH_FILES = 1n << 15n;
 const ADMINISTRATOR = 1n << 3n;
+const MANAGE_THREADS = 1n << 34n;
 const SEND_MESSAGES_IN_THREADS = 1n << 38n;
 
 function cors(res) {
@@ -166,13 +167,13 @@ export default async function handler(req, res) {
   botMemberRes.data.user = botMemberRes.data.user || botUserRes.data;
 
   const destinationType = Number(destinationRes.data?.type);
-  if (![0, 5, 10, 11].includes(destinationType)) {
-    return res.status(400).json({ error: "Select a text channel or an active public/announcement thread." });
+  if (![0, 5, 10, 11, 12].includes(destinationType)) {
+    return res.status(400).json({ error: "Select a text channel or an accessible Discord thread." });
   }
 
   const allChannels = Array.isArray(channelsRes.data) ? channelsRes.data : [];
   const roles = Array.isArray(rolesRes.data) ? rolesRes.data : [];
-  const isThread = destinationType === 10 || destinationType === 11;
+  const isThread = destinationType === 10 || destinationType === 11 || destinationType === 12;
   const permissionChannel = isThread
     ? allChannels.find((c) => c.id === destinationRes.data?.parent_id)
     : allChannels.find((c) => c.id === destinationId);
@@ -192,9 +193,12 @@ export default async function handler(req, res) {
     });
   }
 
-  if (isThread && (destinationRes.data?.thread_metadata?.archived || destinationRes.data?.thread_metadata?.locked)) {
-    return res.status(400).json({ error: "That Discord thread is archived or locked. Choose an active thread." });
+  if (isThread && destinationRes.data?.thread_metadata?.locked && !has(perms, MANAGE_THREADS)) {
+    return res.status(400).json({ error: "That Discord thread is locked. Give the Tactical Centre bot Manage Threads or choose another thread." });
   }
+
+  // Discord automatically unarchives an archived thread when a message is sent,
+  // provided the bot can access the thread and it is not locked against the bot.
 
   const outputName = safeFilename(filename);
   const jsonText = JSON.stringify(payload, null, 2);

@@ -31,8 +31,8 @@ Discord application / bot requirements
    - Send Messages
    - Attach Files
    - Send Messages in Threads (for thread exports)
-4. Forum/media channels require an active public thread.
-5. Private and archived threads are intentionally not listed.
+4. Forum/media channels can list active and archived accessible posts/threads.
+5. Archived threads require Read Message History. All private threads require Manage Threads; without it only joined private threads are visible.
 
 Export behaviour
 ----------------
@@ -41,7 +41,7 @@ Export Save ->
 - Send to Discord
   - server is detected from the active Discord Activity instance
   - select Channel
-  - select active Thread when wanted/required
+  - select active or archived Thread when wanted/required
 
 The JSON payload itself is not changed.
 

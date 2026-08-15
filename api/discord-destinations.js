@@ -3,7 +3,9 @@ const API = "https://discord.com/api/v10";
 const VIEW_CHANNEL = 1n << 10n;
 const SEND_MESSAGES = 1n << 11n;
 const ATTACH_FILES = 1n << 15n;
+const READ_MESSAGE_HISTORY = 1n << 16n;
 const ADMINISTRATOR = 1n << 3n;
+const MANAGE_THREADS = 1n << 34n;
 const SEND_MESSAGES_IN_THREADS = 1n << 38n;
 
 function cors(res) {
@@ -71,6 +73,58 @@ function effectiveChannelPermissions(channel, guildId, member, roles) {
   return permissions;
 }
 
+
+function validSnowflake(value) {
+  return /^\d{16,22}$/.test(String(value || ""));
+}
+
+function requestedChannelIds(req) {
+  return String(req.query?.channel_ids || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(validSnowflake)
+    .slice(0, 25);
+}
+
+async function listArchivedThreads(channelId, botToken, kind) {
+  const threads = [];
+  let before = "";
+  let pages = 0;
+
+  while (pages < 100) {
+    const params = new URLSearchParams({ limit: "100" });
+    if (before) params.set("before", before);
+
+    let path;
+    if (kind === "public") {
+      path = `/channels/${channelId}/threads/archived/public`;
+    } else if (kind === "private") {
+      path = `/channels/${channelId}/threads/archived/private`;
+    } else {
+      path = `/channels/${channelId}/users/@me/threads/archived/private`;
+    }
+
+    const page = await discordJson(`${API}${path}?${params.toString()}`, `Bot ${botToken}`);
+    if (!page.ok) return { ok: false, status: page.status, data: page.data, threads };
+
+    const pageThreads = Array.isArray(page.data?.threads) ? page.data.threads : [];
+    threads.push(...pageThreads);
+    pages += 1;
+
+    if (!page.data?.has_more || pageThreads.length === 0) break;
+
+    const oldest = pageThreads[pageThreads.length - 1];
+    if (kind === "joined-private") {
+      before = String(oldest?.id || "");
+    } else {
+      before = String(oldest?.thread_metadata?.archive_timestamp || "");
+    }
+    if (!before) break;
+  }
+
+  return { ok: true, status: 200, threads };
+}
+
 function validInstanceId(value) {
   const text = String(value || "");
   return text.length >= 8 && text.length <= 220 && /^[A-Za-z0-9._:-]+$/.test(text);
@@ -115,6 +169,7 @@ export default async function handler(req, res) {
   if (!instance.ok) return res.status(instance.status || 403).json({ error: instance.error });
 
   const guildId = instance.guildId;
+  const requestedIds = requestedChannelIds(req);
   const [botUserRes, channelsRes, threadsRes, rolesRes, guildRes] = await Promise.all([
     discordJson(`${API}/users/@me`, `Bot ${botToken}`),
     discordJson(`${API}/guilds/${guildId}/channels`, `Bot ${botToken}`),
@@ -154,6 +209,8 @@ export default async function handler(req, res) {
       const isForumLike = type === 15 || type === 16;
       const canView = has(perms, VIEW_CHANNEL);
       const canAttach = has(perms, ATTACH_FILES);
+      const canReadHistory = has(perms, READ_MESSAGE_HISTORY);
+      const canManageThreads = has(perms, MANAGE_THREADS);
       const canSend = !isForumLike && has(perms, SEND_MESSAGES) && canAttach;
       const canSendThreads = has(perms, SEND_MESSAGES_IN_THREADS) && canAttach;
       return {
@@ -165,36 +222,95 @@ export default async function handler(req, res) {
         position: Number.isFinite(c.position) ? c.position : 0,
         can_send: canSend,
         can_send_threads: canSendThreads,
+        can_read_history: canReadHistory,
+        can_manage_threads: canManageThreads,
         can_view: canView
       };
     })
     .filter((c) => c.can_view && (c.can_send || c.can_send_threads || c.type === 15 || c.type === 16))
     .sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.position - b.position || a.name.localeCompare(b.name));
 
+  const visibleTextChannels = requestedIds.length
+    ? textChannels.filter((c) => requestedIds.includes(String(c.id)))
+    : textChannels;
+
   const allowedParentIds = new Set(
-    textChannels.filter((c) => c.can_send_threads || c.type === 15 || c.type === 16).map((c) => c.id)
+    visibleTextChannels.filter((c) => c.can_send_threads || c.type === 15 || c.type === 16).map((c) => c.id)
   );
 
-  const activeThreads = threadsRes.ok && Array.isArray(threadsRes.data?.threads)
-    ? threadsRes.data.threads
-        .filter((t) => t && [10, 11].includes(Number(t.type)) && allowedParentIds.has(t.parent_id))
-        .map((t) => ({
-          id: t.id,
-          name: t.name || t.id,
-          parent_id: t.parent_id || null,
-          type: Number(t.type),
-          archived: !!t.thread_metadata?.archived,
-          locked: !!t.thread_metadata?.locked
-        }))
-        .filter((t) => !t.archived && !t.locked)
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : [];
+  const threadMap = new Map();
+  const threadWarnings = [];
+
+  const addThreads = (items) => {
+    for (const t of Array.isArray(items) ? items : []) {
+      if (!t || ![10, 11, 12].includes(Number(t.type)) || !allowedParentIds.has(t.parent_id)) continue;
+      const parent = visibleTextChannels.find((c) => c.id === t.parent_id);
+      const archived = !!t.thread_metadata?.archived;
+      const locked = !!t.thread_metadata?.locked;
+
+      // Locked threads can only be used by a bot with Manage Threads.
+      if (locked && !parent?.can_manage_threads) continue;
+
+      threadMap.set(String(t.id), {
+        id: t.id,
+        name: t.name || t.id,
+        parent_id: t.parent_id || null,
+        type: Number(t.type),
+        archived,
+        locked,
+        private: Number(t.type) === 12
+      });
+    }
+  };
+
+  if (threadsRes.ok) addThreads(threadsRes.data?.threads);
+
+  // Discord's active-thread endpoint intentionally omits archived threads.
+  // Enumerate archived public/forum threads and accessible private threads per parent.
+  for (const channel of visibleTextChannels) {
+    if (!allowedParentIds.has(channel.id)) continue;
+
+    if (!channel.can_read_history) {
+      threadWarnings.push(`${channel.name}: archived threads require Read Message History.`);
+      continue;
+    }
+
+    const publicArchived = await listArchivedThreads(channel.id, botToken, "public");
+    if (publicArchived.ok) {
+      addThreads(publicArchived.threads);
+    } else if (![400, 404].includes(publicArchived.status)) {
+      threadWarnings.push(`${channel.name}: Discord would not return archived public/forum threads.`);
+    }
+
+    // Private threads only exist under normal text channels. With Manage Threads,
+    // Discord exposes all archived private threads; otherwise it exposes only joined ones.
+    if (Number(channel.type) === 0) {
+      const privateKind = channel.can_manage_threads ? "private" : "joined-private";
+      const privateArchived = await listArchivedThreads(channel.id, botToken, privateKind);
+      if (privateArchived.ok) {
+        addThreads(privateArchived.threads);
+      } else if (![400, 404].includes(privateArchived.status)) {
+        threadWarnings.push(
+          channel.can_manage_threads
+            ? `${channel.name}: Discord would not return archived private threads.`
+            : `${channel.name}: only private threads the bot has joined can be listed without Manage Threads.`
+        );
+      }
+    }
+  }
+
+  const allThreads = Array.from(threadMap.values()).sort((a, b) => {
+    if (a.parent_id !== b.parent_id) return String(a.parent_id).localeCompare(String(b.parent_id));
+    if (a.archived !== b.archived) return a.archived ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
 
   return res.status(200).json({
     guild_id: guildId,
     guild_name: guildRes.ok ? (guildRes.data?.name || "Discord Server") : "Discord Server",
     activity_channel_id: instance.data?.location?.channel_id || null,
-    channels: textChannels,
-    threads: activeThreads
+    channels: visibleTextChannels,
+    threads: allThreads,
+    thread_warnings: Array.from(new Set(threadWarnings))
   });
 }
