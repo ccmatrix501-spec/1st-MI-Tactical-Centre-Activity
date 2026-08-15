@@ -178,12 +178,60 @@
     card.appendChild(channelLabel);
 
     const threadLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Thread (optional)");
-    const threadSelect = el("select", { style: {
-      width: "100%", marginTop: "6px", padding: "10px", background: "#111418", color: "#fff",
-      border: "1px solid #3b424a", borderRadius: "6px"
-    }, disabled: true });
-    threadLabel.appendChild(threadSelect);
+    const threadWrap = el("div", { style: { marginTop: "6px" } });
+    const threadSearch = el("input", {
+      type: "search",
+      placeholder: "Search threads…",
+      style: {
+        width: "100%",
+        boxSizing: "border-box",
+        padding: "10px",
+        background: "#111418",
+        color: "#fff",
+        border: "1px solid #3b424a",
+        borderRadius: "6px",
+        marginBottom: "6px"
+      },
+      disabled: true
+    });
+    const threadSelect = el("select", {
+      size: "8",
+      style: {
+        width: "100%",
+        height: "180px",
+        padding: "6px",
+        background: "#111418",
+        color: "#fff",
+        border: "1px solid #3b424a",
+        borderRadius: "6px",
+        overflowY: "auto"
+      },
+      disabled: true
+    });
+    // Keep full thread options here for filtering (not shown)
+    let threadOptionsCache = [];
+    threadWrap.appendChild(threadSearch);
+    threadWrap.appendChild(threadSelect);
+    threadLabel.appendChild(threadWrap);
     card.appendChild(threadLabel);
+
+    function applyThreadFilter() {
+      const q = String(threadSearch.value || "").trim().toLowerCase();
+      const previous = threadSelect.value;
+      threadSelect.innerHTML = "";
+      for (const opt of threadOptionsCache) {
+        const label = String(opt.label || "");
+        if (q && !label.toLowerCase().includes(q)) continue;
+        const option = el("option", { value: opt.value }, label);
+        threadSelect.appendChild(option);
+      }
+      if (previous) {
+        const stillThere = Array.from(threadSelect.options).some(function (o) { return o.value === previous; });
+        if (stillThere) threadSelect.value = previous;
+      }
+      threadSelect.dispatchEvent(new Event("change"));
+    }
+    threadSearch.addEventListener("input", applyThreadFilter);
 
     const sendBtn = el("button", { type: "button", disabled: true, style: {
       width: "100%", padding: "12px", border: "0", borderRadius: "7px", background: "#1eff00",
@@ -236,11 +284,14 @@
       function refreshThreads() {
         const selected = channels.find(function (c) { return c.id === channelSelect.value; });
         const matching = threads.filter(function (t) { return t.parent_id === channelSelect.value; });
-        threadSelect.innerHTML = "";
+        threadOptionsCache = [];
+        threadSearch.value = "";
 
         if (!selected) {
-          threadSelect.appendChild(el("option", { value: "" }, "Select a channel first"));
+          threadOptionsCache.push({ value: "", label: "Select a channel first" });
+          applyThreadFilter();
           threadSelect.disabled = true;
+          threadSearch.disabled = true;
           sendBtn.disabled = true;
           return;
         }
@@ -249,16 +300,22 @@
         const directAllowed = !forumLike && !!selected.can_send;
 
         if (directAllowed) {
-          threadSelect.appendChild(el("option", { value: "" }, "No Thread — post directly to channel"));
+          threadOptionsCache.push({ value: "", label: "No Thread — post directly to channel" });
         } else {
-          threadSelect.appendChild(el("option", { value: "" }, matching.length ? "Select a thread…" : "No active threads available"));
+          threadOptionsCache.push({
+            value: "",
+            label: matching.length ? "Select a thread…" : "No active threads available"
+          });
         }
 
         for (const thread of matching) {
-          threadSelect.appendChild(el("option", { value: thread.id }, thread.name));
+          threadOptionsCache.push({ value: thread.id, label: thread.name });
         }
 
-        threadSelect.disabled = !directAllowed && matching.length === 0;
+        applyThreadFilter();
+        const canPick = directAllowed || matching.length > 0;
+        threadSelect.disabled = !canPick;
+        threadSearch.disabled = !canPick || matching.length === 0;
         sendBtn.disabled = directAllowed ? false : !threadSelect.value;
       }
 
@@ -291,6 +348,7 @@
         sendBtn.disabled = true;
         channelSelect.disabled = true;
         threadSelect.disabled = true;
+        threadSearch.disabled = true;
         status.textContent = "Uploading JSON to Discord…";
         status.style.color = "#aeb6bf";
 
