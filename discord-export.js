@@ -1,6 +1,34 @@
 (function () {
   "use strict";
 
+  // Only show these Discord channel IDs in the export picker (empty = show all bot can post to).
+  const ALLOWED_CHANNEL_IDS = [
+    "1291511308625117265",
+    "1285429568747995136",
+    "1284616138965258341",
+    "1287139624464154747"
+  ];
+
+  // Always hide these channel names (case-insensitive).
+  const HIDDEN_CHANNEL_NAMES = [
+    "game-reports",
+    "bad-actors",
+    "hobbies"
+  ];
+
+  function isAllowedChannel(channel) {
+    if (!channel) return false;
+    const name = String(channel.name || "").toLowerCase();
+    for (const hidden of HIDDEN_CHANNEL_NAMES) {
+      if (name === hidden || name.indexOf(hidden) !== -1) return false;
+    }
+    if (ALLOWED_CHANNEL_IDS.length > 0) {
+      return ALLOWED_CHANNEL_IDS.indexOf(String(channel.id)) !== -1;
+    }
+    return true;
+  }
+
+
   const originalCreateObjectURL = URL.createObjectURL.bind(URL);
   const originalRevokeObjectURL = URL.revokeObjectURL.bind(URL);
   const nativeAnchorClick = HTMLAnchorElement.prototype.click;
@@ -267,7 +295,7 @@
       const result = await response.json().catch(function () { return {}; });
       if (!response.ok) throw new Error(result.error || "Could not load Discord destinations.");
 
-      const channels = Array.isArray(result.channels) ? result.channels : [];
+      const channels = (Array.isArray(result.channels) ? result.channels : []).filter(isAllowedChannel);
       const threads = Array.isArray(result.threads) ? result.threads : [];
       const guildName = result.guild_name || "Discord server";
 

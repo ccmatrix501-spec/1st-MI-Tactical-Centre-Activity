@@ -1,0 +1,11 @@
+Overwrite discord-export.js at the ROOT of your Vercel/Activity site.
+
+- Searchable scrollable Thread list
+- Only your 4 allowed channel IDs appear
+- game-reports / bad-actors / hobbies always hidden by name
+
+Allowed IDs:
+  1291511308625117265
+  1285429568747995136
+  1284616138965258341
+  1287139624464154747
