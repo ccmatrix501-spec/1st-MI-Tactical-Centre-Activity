@@ -1,1 +1,1 @@
-1.5.5-web-discord-activity-instance-export
+1.6.0-source-vite-discord-activity
