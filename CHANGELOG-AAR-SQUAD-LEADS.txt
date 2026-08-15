@@ -1,0 +1,9 @@
+AAR Squad Lead selection update
+
+- PL Snapshot now saves immediately when the PL claims a dropship.
+- Snapshot records the PL and the occupants of Platoon Lead, Demon, Nightmare, Cerberus and Hellfire VCs.
+- Squad Leads are no longer selected at PL Snapshot time.
+- During the AAR, the latest PL Snapshot roster auto-loads.
+- The AAR then asks the PL to select Squad Leads from the members snapshotted in each squad.
+- Demon, Nightmare and Hellfire leads are required when occupied; Cerberus remains optional.
+- Selected Squad Leads are attached to that AAR only and included in the AAR roster/report data.

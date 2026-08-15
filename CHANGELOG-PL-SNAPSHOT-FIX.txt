@@ -1,0 +1,26 @@
+PL Snapshot / AAR fix
+=====================
+
+1. PL Snapshot now works while everyone is still together in Briefing Room 1/2/3.
+   - Dropship 1 -> Briefing Room 1
+   - Dropship 2 -> Briefing Room 2
+   - Dropship 3 -> Briefing Room 3
+   - The bot still checks the dedicated squad VCs first.
+   - Briefing Room members are sorted by their server-name tag:
+       [D] = Demon
+       [N] = Nightmare
+       [C] = Cerberus
+       [H] = Hellfire
+   - The person who clicks the PL button is stored as Platoon Lead and is not also counted as a squad member.
+   - Members without one of those tags are kept in the operation roster and shown as Unassigned.
+
+2. Squad Leads are still selected during the AAR, not at PL Snapshot time.
+
+3. Snapshot AAR screen now has:
+   - Continue AAR
+   - Use Voice Channel Instead
+   - Select Manually Instead
+
+4. When no PL Snapshot is being used, the AAR shows the Voice Channel selector immediately.
+
+5. Choosing Voice Channel or Manual explicitly clears the snapshot from that AAR so the report uses the selected roster instead.

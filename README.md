@@ -1,28 +1,50 @@
-# 1st M.I. Tactical Centre — Discord Activity source deployment
+# 1st M.I. Combined Bot
 
-This repository is now a real Vite/React source project.
+One Discord bot for:
 
-## Why this fixes the missing updates
-The old Discord Activity repository served a prebuilt `assets/index-*.js` file. Editing the included desktop App.tsx/reference file did not rebuild that JavaScript, so Discord kept running old application code.
+1. **After Action Reports** — reports, points, PL snapshots, voice reminders  
+2. **Looking for Troopers** — LFG posts, recruit alerts, onboarding alerts  
+3. **Tactical Centre** — specialisation question editor (Sentinel / Driller / Top Dog / Doughboy)
 
-This project uses `src/App.tsx` as the live application source. Vercel runs `npm run build` automatically and Vite creates a new content-hashed JavaScript bundle whenever the app changes.
+## Railway
 
-## GitHub / Vercel deployment
-1. Replace the old Activity repository contents with this project's contents.
-2. Commit/push to GitHub.
-3. In Vercel, make sure the project is connected to that repository.
-4. Framework Preset: Vite (Vercel should auto-detect it).
-5. Build Command: `npm run build` (normally auto-detected).
-6. Output Directory: `dist` (normally auto-detected).
-7. Keep the environment variables:
-   - `DISCORD_CLIENT_ID`
-   - `DISCORD_BOT_TOKEN`
-8. Redeploy.
-9. In Discord Developer Portal -> Activities -> URL Mappings, make sure `/` points to THIS Vercel project's production domain.
-10. Completely stop the Activity in Discord and launch it again.
+- Start: `node index.js`
+- Env: `TOKEN` or `DISCORD_TOKEN`
+- Volume: `/app/data` (stats + specialisations.json)
 
-## Future updates
-Edit `src/App.tsx`, commit and push. Do not edit generated `dist/assets/index-*.js` files.
+## Developer Portal intents
 
-## Licensing
-`public/web-compat.js` makes the web / Discord Activity build licence-free. The desktop / Microsoft Store build can continue using the real `window.steLicense` implementation.
+- Server Members Intent  
+- Message Content Intent  
+- Guild Voice States (default with voice)
+
+## Commands
+
+### AAR
+`/setup` `/drops` `/droplist` `/1stmidrops` `/servermembers` `/setstats` `/settotal` `/setall` `/undolast` `/testreminder` `/plpanel`
+
+### Looking for Troopers
+`/count` `/check` `/lfttest`
+
+### Tactical Centre
+No slash commands — uses permanent **Edit … Questions** buttons in the four specialisation threads.
+
+
+## PL snapshot / AAR flow
+
+- The **PL Snapshot** records the Platoon Lead and everyone present in the Platoon Lead, Demon, Nightmare, Cerberus, and Hellfire voice channels.
+- Squad Leads are **not** chosen when the snapshot is taken.
+- When that PL starts an AAR, the saved roster auto-loads and the AAR asks them to select the Squad Lead from the people who were snapshotted in each squad.
+- Demon, Nightmare, and Hellfire Squad Leads are required when those squads were occupied. Cerberus remains optional.
+- Squad Lead selections apply to that AAR only; the base PL snapshot remains roster-only for the next AAR.
+
+## Folders
+
+- `images/` — LFG rotating images  
+- `recruit_alert_images/` — recruit alert images  
+- `data/specialisations.json` — TAC question bank  
+- `aar-reminder.mp3` — AAR voice reminder  
+
+## Important
+
+Stop any separate AAR / LFT / TAC bots before deploying — one token, one process.

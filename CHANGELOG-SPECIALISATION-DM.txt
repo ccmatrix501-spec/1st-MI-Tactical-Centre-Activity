@@ -1,0 +1,14 @@
+Specialization Question DM Notifications
+=========================================
+
+- When a Specialization Question change is confirmed in the Tactical Centre editor,
+  the bot now privately messages Discord user ID 295215176372846592.
+- The DM includes:
+  - who made the change
+  - specialization/company
+  - question number
+  - old question text
+  - new question text
+  - timestamp
+- If the DM cannot be delivered, the question change still saves and the error is
+  written to the bot console.

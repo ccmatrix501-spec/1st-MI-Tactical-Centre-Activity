@@ -1,0 +1,8 @@
+PL Panel stale-button fix
+
+- Fresh /plpanel messages now use pl_claim_v2_1/2/3 buttons.
+- /plpanel tries to remove old matching PL panels from each Flight Deck channel.
+- If old panels were posted by the retired "1st MI After-action report" app, those buttons cannot be handled by the current Tech Support app; the new panel replaces them.
+- PL claim interactions are acknowledged immediately before snapshot work begins.
+- Existing AAR voice-channel/manual selection fallback is preserved.
+- Existing PL snapshot + Squad Lead-at-AAR workflow is preserved.
