@@ -462,7 +462,13 @@
             })
           });
           const result = await response.json().catch(function () { return {}; });
-          if (!response.ok) throw new Error(result.error || "Discord export failed.");
+          if (!response.ok) {
+            var detail = result.error || result.message || ("HTTP " + response.status);
+            if (result.discord && result.discord.message) {
+              detail += " — " + result.discord.message;
+            }
+            throw new Error(detail);
+          }
 
           status.textContent = "Export sent to Discord successfully.";
           status.style.color = "#1eff00";

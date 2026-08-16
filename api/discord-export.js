@@ -261,8 +261,7 @@ export default async function handler(req, res) {
     userMessage ? "" : null,
     userMessage || null,
     `📎 ${outputName}`
-  ].filter((line) => line !== null && line !== undefined).join("
-");
+  ].filter((line) => line !== null && line !== undefined).join("\n");
 
   const form = new FormData();
   form.append("payload_json", JSON.stringify({
