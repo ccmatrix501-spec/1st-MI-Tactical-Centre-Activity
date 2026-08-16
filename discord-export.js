@@ -77,7 +77,6 @@
     const lines = [];
     lines.push("1st M.I. Tactical Centre — form export");
     if (filename) lines.push("File: " + filename);
-
     let submittedBy = "";
     try {
       const auth = window.miDiscordAuth;
@@ -86,13 +85,10 @@
         submittedBy = user.global_name || user.username || "";
         if (user.username && user.discriminator && user.discriminator !== "0") {
           submittedBy = user.username + "#" + user.discriminator;
-        } else if (user.username && !submittedBy) {
-          submittedBy = user.username;
-        }
+        } else if (user.username && !submittedBy) submittedBy = user.username;
       }
     } catch (_) {}
     if (submittedBy) lines.push("Submitted by: " + submittedBy);
-
     if (payload && typeof payload === "object" && !Array.isArray(payload)) {
       const info = payload.info || {};
       const trainee = payload.traineeName || payload.candidate || payload.recipient || info["Trainee Name"] || info.Candidate || "";
@@ -104,7 +100,6 @@
       if (trainer) lines.push("Trainer/Presenter: " + trainer);
       if (company) lines.push("Company: " + company);
     }
-
     lines.push("");
     lines.push("(Add any extra notes below this line)");
     return lines.join("\n");
@@ -235,6 +230,33 @@
     const status = el("div", { style: { fontSize: "13px", color: "#aeb6bf", marginBottom: "12px" } }, "Checking Discord Activity session…");
     card.appendChild(status);
 
+
+    const messageLabel = el("label", { style: {
+      display: "block", marginBottom: "14px", fontSize: "13px", fontWeight: "700", color: "#1eff00"
+    } }, "Notes / message on Discord post");
+    const messageBox = el("textarea", {
+      rows: "6",
+      style: {
+        width: "100%",
+        boxSizing: "border-box",
+        marginTop: "6px",
+        padding: "10px",
+        background: "#111418",
+        color: "#fff",
+        border: "1px solid #1eff00",
+        borderRadius: "6px",
+        resize: "vertical",
+        minHeight: "110px",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: "13px",
+        lineHeight: "1.4"
+      }
+    });
+    messageBox.value = buildDefaultMessage(payload, filename);
+    messageBox.placeholder = "This text is posted with the JSON file on Discord…";
+    messageLabel.appendChild(messageBox);
+    card.appendChild(messageLabel);
+
     const channelLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Channel");
     const channelSelect = el("select", { style: {
       width: "100%", marginTop: "6px", padding: "10px", background: "#111418", color: "#fff",
@@ -298,30 +320,6 @@
       threadSelect.dispatchEvent(new Event("change"));
     }
     threadSearch.addEventListener("input", applyThreadFilter);
-
-    const messageLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Message with export");
-    const messageBox = el("textarea", {
-      rows: "7",
-      style: {
-        width: "100%",
-        boxSizing: "border-box",
-        marginTop: "6px",
-        padding: "10px",
-        background: "#111418",
-        color: "#fff",
-        border: "1px solid #3b424a",
-        borderRadius: "6px",
-        resize: "vertical",
-        minHeight: "120px",
-        fontFamily: "Arial, Helvetica, sans-serif",
-        fontSize: "13px",
-        lineHeight: "1.4"
-      }
-    });
-    messageBox.value = buildDefaultMessage(payload, filename);
-    messageBox.placeholder = "Optional text posted with the JSON file…";
-    messageLabel.appendChild(messageBox);
-    card.appendChild(messageLabel);
 
     const sendBtn = el("button", { type: "button", disabled: true, style: {
       width: "100%", padding: "12px", border: "0", borderRadius: "7px", background: "#1eff00",
@@ -464,9 +462,7 @@
           const result = await response.json().catch(function () { return {}; });
           if (!response.ok) {
             var detail = result.error || result.message || ("HTTP " + response.status);
-            if (result.discord && result.discord.message) {
-              detail += " — " + result.discord.message;
-            }
+            if (result.discord && result.discord.message) detail += " — " + result.discord.message;
             throw new Error(detail);
           }
 
