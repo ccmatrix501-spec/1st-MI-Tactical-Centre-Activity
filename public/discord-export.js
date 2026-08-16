@@ -72,6 +72,39 @@
     return node;
   }
 
+
+  function buildDefaultMessage(payload, filename) {
+    const lines = [];
+    lines.push("1st M.I. Tactical Centre — form export");
+    if (filename) lines.push("File: " + filename);
+    let submittedBy = "";
+    try {
+      const auth = window.miDiscordAuth;
+      const user = auth && auth.user;
+      if (user) {
+        submittedBy = user.global_name || user.username || "";
+        if (user.username && user.discriminator && user.discriminator !== "0") {
+          submittedBy = user.username + "#" + user.discriminator;
+        } else if (user.username && !submittedBy) submittedBy = user.username;
+      }
+    } catch (_) {}
+    if (submittedBy) lines.push("Submitted by: " + submittedBy);
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const info = payload.info || {};
+      const trainee = payload.traineeName || payload.candidate || payload.recipient || info["Trainee Name"] || info.Candidate || "";
+      const trainer = payload.trainerName || payload.presentedBy || info["Trainer Name"] || "";
+      const company = payload.traineeCompany || payload.company || info["Trainee Company"] || "";
+      const saveType = payload.certificationType || payload.saveType || payload.type || "";
+      if (saveType) lines.push("Type: " + saveType);
+      if (trainee) lines.push("Trainee/Recipient: " + trainee);
+      if (trainer) lines.push("Trainer/Presenter: " + trainer);
+      if (company) lines.push("Company: " + company);
+    }
+    lines.push("");
+    lines.push("(Add any extra notes below this line)");
+    return lines.join("\n");
+  }
+
   function safeDownload(filename, blob) {
     const url = originalCreateObjectURL(blob);
     const link = document.createElement("a");
@@ -196,6 +229,33 @@
 
     const status = el("div", { style: { fontSize: "13px", color: "#aeb6bf", marginBottom: "12px" } }, "Checking Discord Activity session…");
     card.appendChild(status);
+
+
+    const messageLabel = el("label", { style: {
+      display: "block", marginBottom: "14px", fontSize: "13px", fontWeight: "700", color: "#1eff00"
+    } }, "Notes / message on Discord post");
+    const messageBox = el("textarea", {
+      rows: "6",
+      style: {
+        width: "100%",
+        boxSizing: "border-box",
+        marginTop: "6px",
+        padding: "10px",
+        background: "#111418",
+        color: "#fff",
+        border: "1px solid #1eff00",
+        borderRadius: "6px",
+        resize: "vertical",
+        minHeight: "110px",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: "13px",
+        lineHeight: "1.4"
+      }
+    });
+    messageBox.value = buildDefaultMessage(payload, filename);
+    messageBox.placeholder = "This text is posted with the JSON file on Discord…";
+    messageLabel.appendChild(messageBox);
+    card.appendChild(messageLabel);
 
     const channelLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Channel");
     const channelSelect = el("select", { style: {
@@ -395,11 +455,16 @@
               instance_id: ctx.instanceId,
               destination_id: destinationId,
               filename,
-              payload
+              payload,
+              message: String(messageBox.value || "").trim()
             })
           });
           const result = await response.json().catch(function () { return {}; });
-          if (!response.ok) throw new Error(result.error || "Discord export failed.");
+          if (!response.ok) {
+            var detail = result.error || result.message || ("HTTP " + response.status);
+            if (result.discord && result.discord.message) detail += " — " + result.discord.message;
+            throw new Error(detail);
+          }
 
           status.textContent = "Export sent to Discord successfully.";
           status.style.color = "#1eff00";
