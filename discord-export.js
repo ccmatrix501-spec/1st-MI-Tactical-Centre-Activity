@@ -72,6 +72,44 @@
     return node;
   }
 
+
+  function buildDefaultMessage(payload, filename) {
+    const lines = [];
+    lines.push("1st M.I. Tactical Centre — form export");
+    if (filename) lines.push("File: " + filename);
+
+    let submittedBy = "";
+    try {
+      const auth = window.miDiscordAuth;
+      const user = auth && auth.user;
+      if (user) {
+        submittedBy = user.global_name || user.username || "";
+        if (user.username && user.discriminator && user.discriminator !== "0") {
+          submittedBy = user.username + "#" + user.discriminator;
+        } else if (user.username && !submittedBy) {
+          submittedBy = user.username;
+        }
+      }
+    } catch (_) {}
+    if (submittedBy) lines.push("Submitted by: " + submittedBy);
+
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      const info = payload.info || {};
+      const trainee = payload.traineeName || payload.candidate || payload.recipient || info["Trainee Name"] || info.Candidate || "";
+      const trainer = payload.trainerName || payload.presentedBy || info["Trainer Name"] || "";
+      const company = payload.traineeCompany || payload.company || info["Trainee Company"] || "";
+      const saveType = payload.certificationType || payload.saveType || payload.type || "";
+      if (saveType) lines.push("Type: " + saveType);
+      if (trainee) lines.push("Trainee/Recipient: " + trainee);
+      if (trainer) lines.push("Trainer/Presenter: " + trainer);
+      if (company) lines.push("Company: " + company);
+    }
+
+    lines.push("");
+    lines.push("(Add any extra notes below this line)");
+    return lines.join("\n");
+  }
+
   function safeDownload(filename, blob) {
     const url = originalCreateObjectURL(blob);
     const link = document.createElement("a");
@@ -261,6 +299,30 @@
     }
     threadSearch.addEventListener("input", applyThreadFilter);
 
+    const messageLabel = el("label", { style: { display: "block", marginBottom: "12px", fontSize: "13px", fontWeight: "700" } }, "Message with export");
+    const messageBox = el("textarea", {
+      rows: "7",
+      style: {
+        width: "100%",
+        boxSizing: "border-box",
+        marginTop: "6px",
+        padding: "10px",
+        background: "#111418",
+        color: "#fff",
+        border: "1px solid #3b424a",
+        borderRadius: "6px",
+        resize: "vertical",
+        minHeight: "120px",
+        fontFamily: "Arial, Helvetica, sans-serif",
+        fontSize: "13px",
+        lineHeight: "1.4"
+      }
+    });
+    messageBox.value = buildDefaultMessage(payload, filename);
+    messageBox.placeholder = "Optional text posted with the JSON file…";
+    messageLabel.appendChild(messageBox);
+    card.appendChild(messageLabel);
+
     const sendBtn = el("button", { type: "button", disabled: true, style: {
       width: "100%", padding: "12px", border: "0", borderRadius: "7px", background: "#1eff00",
       color: "#020302", fontWeight: "800", cursor: "pointer"
@@ -268,7 +330,7 @@
     card.appendChild(sendBtn);
 
     const hint = el("div", { style: { marginTop: "10px", color: "#7f8993", fontSize: "12px", lineHeight: "1.45" } },
-      "Only channels the Tactical Centre bot can post JSON files to are listed. Forum channels require an active thread. Private/archived threads are not listed.");
+      "Shows active and archived threads the Tactical Centre bot can access. Archived thread listing requires Read Message History. All private threads require Manage Threads; otherwise only private threads the bot has joined can appear.");
     card.appendChild(hint);
 
     overlay.addEventListener("click", function (event) {
@@ -288,7 +350,8 @@
     status.textContent = "Verifying this Discord Activity and loading server channels…";
 
     try {
-      const response = await fetch(`/api/discord-destinations?instance_id=${encodeURIComponent(ctx.instanceId)}`, {
+      const channelQuery = ALLOWED_CHANNEL_IDS.length ? `&channel_ids=${encodeURIComponent(ALLOWED_CHANNEL_IDS.join(","))}` : "";
+      const response = await fetch(`/api/discord-destinations?instance_id=${encodeURIComponent(ctx.instanceId)}${channelQuery}`, {
         headers: { "Accept": "application/json" },
         cache: "no-store"
       });
@@ -332,12 +395,15 @@
         } else {
           threadOptionsCache.push({
             value: "",
-            label: matching.length ? "Select a thread…" : "No active threads available"
+            label: matching.length ? "Select a thread…" : "No accessible threads available"
           });
         }
 
         for (const thread of matching) {
-          threadOptionsCache.push({ value: thread.id, label: thread.name });
+          const state = thread.archived ? " — Archived" : " — Active";
+          const privacy = thread.private ? " — Private" : "";
+          const locked = thread.locked ? " — Locked" : "";
+          threadOptionsCache.push({ value: thread.id, label: thread.name + state + privacy + locked });
         }
 
         applyThreadFilter();
@@ -368,7 +434,7 @@
         if (!directAllowed && !threadSelect.value) {
           status.textContent = forumLike
             ? "Forum channels require a thread selection."
-            : "The bot can only post to a thread in this channel. Select an active thread.";
+            : "The bot can only post to a thread in this channel. Select a thread.";
           status.style.color = "#ffb454";
           return;
         }
@@ -391,7 +457,8 @@
               instance_id: ctx.instanceId,
               destination_id: destinationId,
               filename,
-              payload
+              payload,
+              message: String(messageBox.value || "").trim()
             })
           });
           const result = await response.json().catch(function () { return {}; });
@@ -410,10 +477,12 @@
         }
       });
 
+      const warnings = Array.isArray(result.thread_warnings) ? result.thread_warnings : [];
       status.textContent = channels.length
-        ? `Connected to ${guildName}. Choose a channel, then a thread if needed.`
+        ? `Connected to ${guildName}. Loaded ${threads.length} accessible thread${threads.length === 1 ? "" : "s"}.` +
+          (warnings.length ? ` ${warnings[0]}` : " Choose a channel, then a thread if needed.")
         : "No Discord channels are available to the Tactical Centre bot in this server.";
-      status.style.color = channels.length ? "#aeb6bf" : "#ffb454";
+      status.style.color = channels.length ? (warnings.length ? "#ffb454" : "#aeb6bf") : "#ffb454";
     } catch (err) {
       status.textContent = err instanceof Error ? err.message : String(err);
       status.style.color = "#ff5b5b";

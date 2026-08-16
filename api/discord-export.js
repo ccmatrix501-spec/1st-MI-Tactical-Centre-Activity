@@ -7,6 +7,44 @@ const ADMINISTRATOR = 1n << 3n;
 const MANAGE_THREADS = 1n << 34n;
 const SEND_MESSAGES_IN_THREADS = 1n << 38n;
 
+const CHANNEL_ROLE_PINGS = {
+  "1291511308625117265": [
+    "1257443553358123110",
+    "1258867174232166400",
+    "1257452177660706918"
+  ],
+  "1285429568747995136": [
+    "1257444092431044691",
+    "1258867171358933113",
+    "1257452237093998703"
+  ],
+  "1284616138965258341": [
+    "1257444166711902372",
+    "1258867177356922962",
+    "1257452279552933889"
+  ],
+  "1287139624464154747": [
+    "1257444253685256313",
+    "1258867158935666688",
+    "1257452317276377143"
+  ]
+};
+
+function rolesForDestination(parentChannelId) {
+  const key = String(parentChannelId || "");
+  const list = CHANNEL_ROLE_PINGS[key];
+  if (!Array.isArray(list)) return [];
+  return list.map(String).filter((id) => /^\d{16,22}$/.test(id));
+}
+
+function clipMessage(text, maxLen = 1500) {
+  const cleaned = String(text || "").trim();
+  if (!cleaned) return "";
+  if (cleaned.length <= maxLen) return cleaned;
+  return cleaned.slice(0, maxLen - 1) + "…";
+}
+
+
 function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -109,15 +147,18 @@ async function resolveActivityInstance(instanceId, clientId, botToken) {
 function exportSummary(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
   const lines = [];
+  const info = payload.info || {};
   const saveType = payload.certificationType || payload.saveType || payload.type;
-  const trainee = payload.traineeName || payload.candidate || payload.recipient || payload.info?.["Trainee Name"] || payload.info?.Candidate;
-  const trainer = payload.trainerName || payload.presentedBy || payload.info?.["Trainer Name"];
-  const company = payload.traineeCompany || payload.company || payload.info?.["Trainee Company"];
+  const trainee = payload.traineeName || payload.candidate || payload.recipient || info["Trainee Name"] || info.Candidate;
+  const trainer = payload.trainerName || payload.presentedBy || info["Trainer Name"];
+  const company = payload.traineeCompany || payload.company || info["Trainee Company"];
+  const mapName = payload.mapName || payload.map || info.Map || info["Map Name"];
   if (saveType) lines.push(`**Type:** ${String(saveType)}`);
   if (trainee) lines.push(`**Trainee/Recipient:** ${String(trainee)}`);
   if (trainer) lines.push(`**Trainer/Presenter:** ${String(trainer)}`);
   if (company) lines.push(`**Company:** ${String(company)}`);
-  return lines.slice(0, 4);
+  if (mapName) lines.push(`**Map:** ${String(mapName)}`);
+  return lines.slice(0, 6);
 }
 
 export default async function handler(req, res) {
@@ -127,7 +168,7 @@ export default async function handler(req, res) {
 
   const botToken = process.env.DISCORD_BOT_TOKEN;
   const clientId = String(process.env.DISCORD_CLIENT_ID || "1532302380237066271");
-  const { instance_id, destination_id, filename, payload } = req.body || {};
+  const { instance_id, destination_id, filename, payload, message } = req.body || {};
   const instanceId = String(instance_id || "");
   const destinationId = String(destination_id || "");
 
@@ -206,16 +247,32 @@ export default async function handler(req, res) {
     return res.status(413).json({ error: "This JSON export is too large to send through the Tactical Centre endpoint." });
   }
 
+  const parentIdForRoles = isThread
+    ? String(destinationRes.data?.parent_id || permissionChannel?.id || "")
+    : String(destinationId);
+  const pingRoleIds = rolesForDestination(parentIdForRoles);
+  const roleMentions = pingRoleIds.map((id) => `<@&${id}>`).join(" ");
+  const userMessage = clipMessage(message);
+
   const content = [
+    roleMentions || null,
     "**1st M.I. Tactical Centre Export**",
     ...exportSummary(payload),
+    userMessage ? "" : null,
+    userMessage || null,
     `📎 ${outputName}`
-  ].join("\n");
+  ].filter((line) => line !== null && line !== undefined).join("
+");
 
   const form = new FormData();
   form.append("payload_json", JSON.stringify({
     content,
-    allowed_mentions: { parse: [] },
+    allowed_mentions: {
+      parse: [],
+      roles: pingRoleIds,
+      users: [],
+      replied_user: false
+    },
     attachments: [{ id: 0, filename: outputName, description: "Tactical Centre JSON export" }]
   }));
   form.append("files[0]", new Blob([jsonText], { type: "application/json" }), outputName);
