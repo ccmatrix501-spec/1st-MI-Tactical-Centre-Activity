@@ -1,0 +1,264 @@
+/* 1st M.I. Tactical Centre — phone / small tablet layout fix */
+@media (max-width: 900px) {
+  html, body {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 100% !important;
+    -webkit-text-size-adjust: 100% !important;
+  }
+
+
+  #root {
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+
+  .app {
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+  }
+
+  .topbar,
+  header.topbar {
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    padding-top: max(8px, env(safe-area-inset-top)) !important;
+  }
+
+  .brand {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    max-width: calc(100% - 90px) !important;
+  }
+
+  .brand h1 {
+    font-size: 13px !important;
+    max-width: 100% !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .brand p {
+    display: none !important;
+  }
+
+  .tabs,
+  .header-tabs,
+  nav.tabs {
+    order: 3 !important;
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    padding-bottom: 4px !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .tabs .btn,
+  .header-tabs button,
+  .header-tabs .btn,
+  .tab-button {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
+    min-height: 40px !important;
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+  }
+
+  .header-actions {
+    flex: 0 0 auto !important;
+  }
+
+  .app-body {
+    height: auto !important;
+    min-height: calc(100dvh - 120px) !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding-bottom: max(80px, env(safe-area-inset-bottom)) !important;
+  }
+
+  /* Cert / form pages: force single column */
+  .two-panel {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .two-panel > aside,
+  .two-panel > main,
+  .two-panel > section,
+  .two-panel > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .grid-two,
+  .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .settings-page {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 12px !important;
+  }
+
+  .scroll-page {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .toolbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+  }
+
+  .toolbar .btn,
+  .toolbar button,
+  .toolbar select {
+    min-height: 40px !important;
+    font-size: 13px !important;
+  }
+
+  .btn,
+  button.btn {
+    min-height: 40px !important;
+    touch-action: manipulation;
+  }
+
+  input, select, textarea {
+    font-size: 16px !important; /* prevents iOS zoom */
+    max-width: 100% !important;
+  }
+
+  /* Tac map */
+  .map-page,
+  .tac-map-main,
+  .map-stage {
+    width: 100% !important;
+    height: min(55vh, 420px) !important;
+    max-height: 55vh !important;
+  }
+
+  /* 3D builder */
+  .mi3d-apemap-shell,
+  .mi3d-layout,
+  .stratmap-layout {
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .mi3d-side-panel,
+  .mi3d-viewport-panel,
+  .mi3d-summary-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .mi3d-apemap-view,
+  .mi3d-canvas {
+    width: 100% !important;
+    height: min(50vh, 360px) !important;
+    min-height: 240px !important;
+  }
+
+  .mi3d-bottom-toolbar {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+  }
+
+  .mi3d-help,
+  .mi3d-selected-readout {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    margin: 8px 0 !important;
+  }
+
+  /* Modals */
+  .modal-box,
+  .driller-requirements-popup,
+  .restriction-map-popup,
+  .help-card {
+    width: min(96vw, 560px) !important;
+    max-width: 96vw !important;
+    max-height: 88vh !important;
+    overflow-y: auto !important;
+    margin: 8px !important;
+  }
+
+  .driller-requirements-popup-textbox {
+    min-height: 180px !important;
+    max-height: 40vh !important;
+  }
+
+  .corner-controls {
+    left: 8px !important;
+    bottom: max(8px, env(safe-area-inset-bottom)) !important;
+    transform: scale(0.92);
+    transform-origin: bottom left;
+  }
+
+  .bottom-credit {
+    position: relative !important;
+    margin-top: 16px !important;
+    padding-bottom: 24px !important;
+    font-size: 11px !important;
+  }
+
+  /* Awards / merits panels */
+  .award-calculator,
+  .card {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand h1 {
+    font-size: 12px !important;
+  }
+  .tabs .btn,
+  .header-tabs button {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+  }
+}

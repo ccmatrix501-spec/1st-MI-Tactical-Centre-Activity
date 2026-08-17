@@ -1,0 +1,2 @@
+Add this line in <head> AFTER your main CSS:
+    <link rel="stylesheet" href="./mobile-fix.css" />
