@@ -1,9 +1,9 @@
-const ACTIVITY_BUILD = "desktop-web-sync";
-const API_BASE = "https://1st-mi-matrix-r-d-production.up.railway.app";
+import { DiscordSDK } from "@discord/embedded-app-sdk";
+
+const ACTIVITY_BUILD = "desktop-web-sync-1.6.2";
+const API_BASE = "/api";
 const REQUIRED_GUILD_ID = "1256977709884641382";
 const MAIN_APP_SRC = String(window.__TACTICAL_MAIN_BUNDLE__ || "./assets/app.js");
-const SDK_MODULE =
-  "https://cdn.jsdelivr.net/npm/@discord/embedded-app-sdk@2.5.0/+esm";
 
 let mainAppLoaded = false;
 
@@ -239,7 +239,6 @@ async function authenticateActivity() {
     throw new Error("The Discord Activity application ID is not configured.");
   }
 
-  const { DiscordSDK } = await import(SDK_MODULE);
   const discordSdk = new DiscordSDK(String(config.clientId));
 
   window.miDiscordSdk = discordSdk;
