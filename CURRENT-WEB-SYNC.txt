@@ -1,0 +1,10 @@
+Discord Activity production content source:
+ccmatrix501-spec/1st-MI-Tactical-Centre-By-Matrix
+
+Web version: 1.3.27
+Web commit: 8efe3ec0fb597b47aa25e7ff6756fc032ebca689
+JavaScript bundle: assets/index-DLJcwczp.js
+CSS bundle: assets/index-DGNzVcit.css
+
+The Discord Activity shell is kept separate so Discord launch/auth
+behavior can be changed without diverging the Tactical Centre UI.
