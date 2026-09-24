@@ -1,8 +1,7 @@
 (() => {
   "use strict";
 
-  const DEFAULT_API =
-    "https://1st-mi-matrix-r-d-production.up.railway.app";
+  const DEFAULT_API = "/api";
   const DB_NAME = "mi-tactical-centre-web";
   const DB_VERSION = 1;
   const MAP_STORE = "maps";
@@ -10,11 +9,14 @@
 
   function apiBase() {
     try {
-      return (
-        String(localStorage.getItem("ste-discord-bot-api") || "")
-          .trim()
-          .replace(/\/+$/, "") || DEFAULT_API
-      );
+      const stored = String(localStorage.getItem("ste-discord-bot-api") || "")
+        .trim()
+        .replace(/\/+$/, "");
+
+      // Discord Activities are CSP-sandboxed. Always use the same-origin Vercel
+      // proxy instead of a previously saved direct Railway URL.
+      if (window.miDiscordActivity === true) return DEFAULT_API;
+      return stored || DEFAULT_API;
     } catch {
       return DEFAULT_API;
     }
