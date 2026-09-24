@@ -11,23 +11,62 @@ type CurrentBuild = {
   css?: string;
 };
 
-async function loadCurrentTacticalCentre() {
-  const response = await fetch("/current-build.json?t=" + Date.now(), {
-    cache: "no-store"
-  });
+const EMBEDDED_CURRENT_BUILD: CurrentBuild = {
+  sourceRepo: "ccmatrix501-spec/1st-MI-Tactical-Centre-By-Matrix",
+  sourceCommit: "8efe3ec0fb597b47aa25e7ff6756fc032ebca689",
+  version: "1.3.27",
+  bundle: "/assets/index-DLJcwczp.js",
+  css: "/assets/index-DGNzVcit.css"
+};
 
-  if (!response.ok) {
-    throw new Error(
-      "Current Tactical Centre build manifest is unavailable (HTTP " +
-        response.status +
-        ")."
+async function resolveCurrentBuild(): Promise<CurrentBuild> {
+  const manifestUrl = new URL(
+    "./current-build.json?t=" + Date.now(),
+    window.location.href
+  ).href;
+
+  try {
+    const response = await fetch(manifestUrl, {
+      cache: "no-store"
+    });
+
+    if (response.ok) {
+      const build = (await response.json()) as CurrentBuild;
+
+      if (build?.bundle) {
+        return {
+          ...EMBEDDED_CURRENT_BUILD,
+          ...build
+        };
+      }
+    } else {
+      console.warn(
+        "[TACTICAL ACTIVITY] current-build.json unavailable; using embedded synced build. HTTP",
+        response.status
+      );
+    }
+  } catch (error) {
+    console.warn(
+      "[TACTICAL ACTIVITY] Could not read current-build.json; using embedded synced build.",
+      error
     );
   }
 
-  const build = (await response.json()) as CurrentBuild;
+  return EMBEDDED_CURRENT_BUILD;
+}
+
+function pageUrl(path: string): string {
+  return new URL(
+    path.replace(/^\/+/, ""),
+    new URL("./", window.location.href)
+  ).href;
+}
+
+async function loadCurrentTacticalCentre() {
+  const build = await resolveCurrentBuild();
 
   if (!build?.bundle) {
-    throw new Error("Current Tactical Centre build manifest has no bundle.");
+    throw new Error("The current Tactical Centre build has no JavaScript bundle.");
   }
 
   if (build.css) {
@@ -41,10 +80,11 @@ async function loadCurrentTacticalCentre() {
       link.crossOrigin = "anonymous";
       link.dataset.tacticalCurrentCss = "true";
       link.href =
-        build.css +
-        (build.css.includes("?") ? "&" : "?") +
-        "v=" +
-        encodeURIComponent(build.sourceCommit || build.version || Date.now());
+        pageUrl(build.css) +
+        "?v=" +
+        encodeURIComponent(
+          build.sourceCommit || build.version || String(Date.now())
+        );
       document.head.appendChild(link);
     }
   }
@@ -66,10 +106,11 @@ async function loadCurrentTacticalCentre() {
   (window as any).__TACTICAL_MAIN_BUNDLE__ = build.bundle;
 
   const bundleUrl =
-    build.bundle +
-    (build.bundle.includes("?") ? "&" : "?") +
-    "v=" +
-    encodeURIComponent(build.sourceCommit || build.version || Date.now());
+    pageUrl(build.bundle) +
+    "?v=" +
+    encodeURIComponent(
+      build.sourceCommit || build.version || String(Date.now())
+    );
 
   await import(/* @vite-ignore */ bundleUrl);
 }
