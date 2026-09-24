@@ -1,6 +1,6 @@
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 
-const ACTIVITY_BUILD = "1.6.6-direct-current-build";
+const ACTIVITY_BUILD = "1.6.7-direct-bundle";
 const API_BASE = "/api";
 const REQUIRED_GUILD_ID = "1256977709884641382";
 
