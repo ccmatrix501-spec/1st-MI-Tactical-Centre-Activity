@@ -1,0 +1,125 @@
+name: Sync current Tactical Centre web build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/sync-current-web-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Discord Activity
+        uses: actions/checkout@v4
+        with:
+          path: activity
+          fetch-depth: 0
+
+      - name: Checkout current Tactical Centre web build
+        uses: actions/checkout@v4
+        with:
+          repository: ccmatrix501-spec/1st-MI-Tactical-Centre-By-Matrix
+          ref: main
+          path: web
+          fetch-depth: 1
+
+      - name: Sync current production build
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf activity/public/assets
+          mkdir -p activity/public/assets
+          cp -a web/assets/. activity/public/assets/
+
+          for file in icon.png icon.ico icon-192.png icon-512.png manifest.webmanifest splash.png.png; do
+            if [ -f "web/$file" ]; then
+              cp "web/$file" "activity/public/$file"
+            fi
+          done
+
+          SOURCE_COMMIT="$(git -C web rev-parse HEAD)"
+          VERSION="$(sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' web/version.txt | head -n1)"
+          if [ -z "$VERSION" ]; then
+            VERSION="unknown"
+          fi
+
+          BUNDLE="$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' web/index.html | head -n1)"
+          CSS="$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.css' web/index.html | head -n1)"
+
+          if [ -z "$BUNDLE" ] || [ ! -f "web/$BUNDLE" ]; then
+            echo "Could not determine current Tactical Centre JavaScript bundle."
+            exit 1
+          fi
+
+          if [ -z "$CSS" ] || [ ! -f "web/$CSS" ]; then
+            echo "Could not determine current Tactical Centre CSS bundle."
+            exit 1
+          fi
+
+          cat > activity/public/current-build.json <<EOF
+          {
+            "sourceRepo": "ccmatrix501-spec/1st-MI-Tactical-Centre-By-Matrix",
+            "sourceCommit": "$SOURCE_COMMIT",
+            "version": "$VERSION",
+            "bundle": "/$BUNDLE",
+            "css": "/$CSS"
+          }
+          EOF
+
+          cat > activity/CURRENT-WEB-SYNC.txt <<EOF
+          Discord Activity production content source:
+          ccmatrix501-spec/1st-MI-Tactical-Centre-By-Matrix
+
+          Web version: $VERSION
+          Web commit: $SOURCE_COMMIT
+          JavaScript bundle: $BUNDLE
+          CSS bundle: $CSS
+
+          The Discord Activity shell is kept separate so Discord launch/auth
+          behavior can be changed without diverging the Tactical Centre UI.
+          EOF
+
+          # Remove the old duplicated/stale React application source. The Activity
+          # now always loads the exact production web build above.
+          rm -f activity/src/App.tsx activity/src/index.css
+          rm -rf activity/src/assets
+
+      - name: Verify Activity build
+        shell: bash
+        working-directory: activity
+        run: |
+          set -euo pipefail
+          npm install
+          npm run build
+
+          test -f dist/current-build.json
+          test -f dist/web-runtime.js
+          BUNDLE="$(node -e "const f=require('./dist/current-build.json'); process.stdout.write('.'+f.bundle)")"
+          test -f "dist/${BUNDLE#./}"
+
+      - name: Commit synced web build
+        shell: bash
+        working-directory: activity
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A public src/App.tsx src/index.css src/assets CURRENT-WEB-SYNC.txt 2>/dev/null || true
+
+          if git diff --cached --quiet; then
+            echo "Discord Activity already matches the current web build."
+            exit 0
+          fi
+
+          git commit -m "Sync Discord Activity to current Tactical Centre web build"
+          git push
