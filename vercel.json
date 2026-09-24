@@ -1,4 +1,6 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
   "headers": [
     {
       "source": "/index.html",
@@ -10,25 +12,7 @@
       ]
     },
     {
-      "source": "/discord-activity.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, max-age=0"
-        }
-      ]
-    },
-    {
-      "source": "/discord-export.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store, max-age=0"
-        }
-      ]
-    },
-    {
-      "source": "/web-compat.js",
+      "source": "/web-runtime.js",
       "headers": [
         {
           "key": "Cache-Control",
