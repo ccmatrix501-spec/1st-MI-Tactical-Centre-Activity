@@ -1,11 +1,13 @@
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 
-const ACTIVITY_BUILD = "desktop-web-sync-1.6.2";
+const ACTIVITY_BUILD = "desktop-web-sync-1.6.3-auto-launch";
 const API_BASE = "/api";
 const REQUIRED_GUILD_ID = "1256977709884641382";
 const MAIN_APP_SRC = String(window.__TACTICAL_MAIN_BUNDLE__ || "./assets/app.js");
 
 let mainAppLoaded = false;
+let discordContextPromise = null;
+let identityPromise = null;
 
 function getParam(name) {
   try {
@@ -97,9 +99,9 @@ function ensureGate() {
     '<div style="font-size:12px;letter-spacing:2px;color:#20ff00;font-weight:800;' +
     'margin-bottom:12px">1ST M.I. TACTICAL CENTRE</div>' +
     '<h1 id="discord-access-title" style="font-size:24px;margin:0 0 10px">' +
-    'Verifying Discord access…</h1>' +
+    'Opening Tactical Centre…</h1>' +
     '<p id="discord-access-message" style="margin:0;color:#aab4ba;line-height:1.55">' +
-    'Checking server and member access.</p>' +
+    'Checking the Discord Activity launch context.</p>' +
     '<button id="discord-access-retry" type="button" style="display:none;margin:20px auto 0;' +
     'padding:10px 18px;border:1px solid #20ff00;border-radius:7px;background:#11171b;' +
     'color:#20ff00;font-weight:800;cursor:pointer">Retry</button>' +
@@ -197,7 +199,7 @@ function installDiscordAccessShim(access) {
     valid: true,
     provider: "discord-activity",
     isAdmin: Boolean(access?.isAdmin),
-    discordUserId: String(access?.userId || ""),
+    discordUserId: String(access?.userId || access?.discordUserId || ""),
     guildId: String(access?.guildId || REQUIRED_GUILD_ID)
   };
 
@@ -211,7 +213,7 @@ function installDiscordAccessShim(access) {
     activate: async () => ({ success: true, ...status }),
     getCurrentUserKey: async () => ({
       success: true,
-      key: "Discord role access",
+      key: "Discord server access",
       expiresAt: null,
       provider: "discord-activity"
     })
@@ -224,34 +226,179 @@ function installDiscordAccessShim(access) {
   );
 }
 
-async function authenticateActivity() {
+async function getDiscordContext() {
+  if (discordContextPromise) return discordContextPromise;
+
+  discordContextPromise = (async () => {
+    const config = await fetchJson(
+      API_BASE + "/tactical-centre/activity/config"
+    );
+
+    if (!config?.clientId) {
+      throw new Error("The Discord Activity application ID is not configured.");
+    }
+
+    const discordSdk = new DiscordSDK(String(config.clientId));
+    window.miDiscordSdk = discordSdk;
+
+    await discordSdk.ready();
+
+    const guildId = String(discordSdk.guildId || "");
+
+    window.miDiscordActivity = true;
+    window.miDiscordActivityBuild = ACTIVITY_BUILD;
+    window.miDiscordGuildId = guildId || null;
+    window.miDiscordChannelId = discordSdk.channelId || null;
+    window.miDiscordInstanceId = discordSdk.instanceId || null;
+
+    return {
+      config,
+      discordSdk,
+      guildId
+    };
+  })();
+
+  return discordContextPromise;
+}
+
+async function authenticateDiscordIdentity() {
+  if (identityPromise) return identityPromise;
+
+  identityPromise = (async () => {
+    const { config, discordSdk, guildId } = await getDiscordContext();
+
+    if (guildId !== REQUIRED_GUILD_ID) {
+      return {
+        activity: true,
+        allowed: false,
+        isAdmin: false,
+        guildId: guildId || null,
+        reason: "wrong-guild"
+      };
+    }
+
+    const { verifier, challenge } = await makePkce();
+
+    // Identity is deliberately NOT requested during normal Activity startup.
+    // This flow is available only for features that genuinely require knowing
+    // the current Discord user (for example administrator-only controls).
+    // applications.commands is intentionally omitted: the Activity/bot is
+    // already installed in the server and normal users do not need that scope.
+    const authorization = await discordSdk.commands.authorize({
+      client_id: String(config.clientId),
+      response_type: "code",
+      state: randomBase64Url(24),
+      prompt: "none",
+      scope: ["identify"],
+      code_challenge: challenge,
+      code_challenge_method: "S256"
+    });
+
+    if (!authorization?.code) {
+      throw new Error("Discord did not return an authorization code.");
+    }
+
+    const token = await fetchJson(
+      API_BASE + "/tactical-centre/activity/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          code: authorization.code,
+          codeVerifier: verifier
+        })
+      }
+    );
+
+    const accessToken = String(token?.access_token || "");
+    if (!accessToken) {
+      throw new Error("Discord Activity authentication did not return a token.");
+    }
+
+    window.miDiscordAccessToken = accessToken;
+
+    const auth = await discordSdk.commands.authenticate({
+      access_token: accessToken
+    });
+
+    if (!auth?.user?.id) {
+      throw new Error("Discord Activity authentication failed.");
+    }
+
+    const access = await fetchJson(
+      API_BASE + "/tactical-centre/activity/access",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + accessToken
+        },
+        body: JSON.stringify({
+          guildId
+        })
+      }
+    );
+
+    if (!access?.allowed) {
+      return {
+        activity: true,
+        allowed: false,
+        isAdmin: false,
+        guildId,
+        userId: String(auth.user.id),
+        reason: "server-access-denied",
+        error:
+          access?.error ||
+          "You do not have access to the 1st M.I. Tactical Centre Activity."
+      };
+    }
+
+    installDiscordAccessShim({
+      ...access,
+      authenticatedUser: {
+        id: String(auth.user.id),
+        username: String(
+          auth.user.global_name ||
+          auth.user.username ||
+          access.username ||
+          ""
+        )
+      }
+    });
+
+    window.dispatchEvent(
+      new CustomEvent("mi-discord-identity-ready", {
+        detail: window.miDiscordAccess
+      })
+    );
+
+    return {
+      activity: true,
+      allowed: true,
+      isAdmin: Boolean(access.isAdmin),
+      userId: String(auth.user.id),
+      guildId
+    };
+  })();
+
+  try {
+    return await identityPromise;
+  } catch (error) {
+    identityPromise = null;
+    throw error;
+  }
+}
+
+async function bootstrapActivity() {
   ensureGate();
   setGateStatus(
-    "Verifying Discord access…",
-    "Connecting to Discord and checking the launch server."
+    "Opening Tactical Centre…",
+    "Checking that the Activity was launched from the 1st M.I. Discord server."
   );
 
-  const config = await fetchJson(
-    API_BASE + "/tactical-centre/activity/config"
-  );
-
-  if (!config?.clientId) {
-    throw new Error("The Discord Activity application ID is not configured.");
-  }
-
-  const discordSdk = new DiscordSDK(String(config.clientId));
-
-  window.miDiscordSdk = discordSdk;
-
-  await discordSdk.ready();
-
-  const guildId = String(discordSdk.guildId || "");
-
-  window.miDiscordActivity = true;
-  window.miDiscordActivityBuild = ACTIVITY_BUILD;
-  window.miDiscordGuildId = guildId || null;
-  window.miDiscordChannelId = discordSdk.channelId || null;
-  window.miDiscordInstanceId = discordSdk.instanceId || null;
+  const { guildId } = await getDiscordContext();
 
   if (guildId !== REQUIRED_GUILD_ID) {
     showDenied(
@@ -267,119 +414,52 @@ async function authenticateActivity() {
     };
   }
 
-  setGateStatus(
-    "Verifying Discord member…",
-    "Confirming your Discord account and 1st M.I. server membership."
-  );
-
-  const { verifier, challenge } = await makePkce();
-
-  const authorization = await discordSdk.commands.authorize({
-    client_id: String(config.clientId),
-    response_type: "code",
-    state: randomBase64Url(24),
-    prompt: "none",
-    scope: ["identify", "applications.commands"],
-    code_challenge: challenge,
-    code_challenge_method: "S256"
-  });
-
-  if (!authorization?.code) {
-    throw new Error("Discord did not return an authorization code.");
-  }
-
-  const token = await fetchJson(
-    API_BASE + "/tactical-centre/activity/token",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        code: authorization.code,
-        codeVerifier: verifier
-      })
-    }
-  );
-
-  const accessToken = String(token?.access_token || "");
-  if (!accessToken) {
-    throw new Error("Discord Activity authentication did not return a token.");
-  }
-
-  // Keep the token in memory only for authenticated Activity API calls.
-  // It is never written to localStorage/sessionStorage.
-  window.miDiscordAccessToken = accessToken;
-
-  const auth = await discordSdk.commands.authenticate({
-    access_token: accessToken
-  });
-
-  if (!auth?.user?.id) {
-    throw new Error("Discord Activity authentication failed.");
-  }
-
-  const access = await fetchJson(
-    API_BASE + "/tactical-centre/activity/access",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + accessToken
-      },
-      body: JSON.stringify({
-        guildId
-      })
-    }
-  );
-
-  if (!access?.allowed) {
-    showDenied(
-      "Access denied",
-      access?.error ||
-        "You do not have access to the 1st M.I. Tactical Centre Activity."
-    );
-
-    return {
-      activity: true,
-      allowed: false,
-      guildId,
-      userId: auth.user.id,
-      reason: "server-access-denied"
-    };
-  }
-
+  // A valid Discord Activity launch already carries its guild context.
+  // Do not force OAuth/authorization just to open the application.
   installDiscordAccessShim({
-    ...access,
-    authenticatedUser: {
-      id: String(auth.user.id),
-      username: String(
-        auth.user.global_name ||
-        auth.user.username ||
-        access.username ||
-        ""
-      )
-    }
+    allowed: true,
+    isAdmin: false,
+    userId: "",
+    guildId,
+    provider: "discord-activity-guild"
   });
 
+  window.miDiscordRequestIdentity = authenticateDiscordIdentity;
+  window.miDiscordRequestAdminAccess = async () => {
+    const result = await authenticateDiscordIdentity();
+
+    if (!result?.allowed) {
+      throw new Error(
+        result?.error ||
+        "Discord account verification did not grant Tactical Centre access."
+      );
+    }
+
+    if (!result?.isAdmin) {
+      throw new Error(
+        "Your Discord account does not have Tactical Centre administrator access."
+      );
+    }
+
+    return window.miDiscordAccess;
+  };
+
   setGateStatus(
-    access.isAdmin ? "Admin access verified" : "Access verified",
-    access.isAdmin
-      ? "Opening the Tactical Centre with administrator access."
-      : "Opening the Tactical Centre."
+    "Server access verified",
+    "Opening the Tactical Centre."
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   removeGate();
-  loadMainApp();
+  await loadMainApp();
 
   return {
     activity: true,
     allowed: true,
-    isAdmin: Boolean(access.isAdmin),
-    userId: String(auth.user.id),
-    guildId
+    isAdmin: false,
+    guildId,
+    authentication: "guild-launch"
   };
 }
 
@@ -397,13 +477,13 @@ if (!isActivity) {
 } else {
   document.documentElement.classList.add("discord-activity");
 
-  window.miDiscordReady = authenticateActivity().catch((error) => {
+  window.miDiscordReady = bootstrapActivity().catch((error) => {
     console.error("[TACTICAL ACTIVITY]", error);
 
     showDenied(
       "Discord access could not be verified",
       error?.message ||
-        "The Tactical Centre could not verify your Discord Activity access."
+        "The Tactical Centre could not verify the Discord Activity launch."
     );
 
     return {
