@@ -50,6 +50,14 @@
   ],
   "rewrites": [
     {
+      "source": "/assets/maps/hllv/:file",
+      "destination": "https://raw.githubusercontent.com/ccmatrix501-spec/1st-MI-Tactical-Centre-By-Matrix/main/assets/maps/hllv/:file"
+    },
+    {
+      "source": "/assets/companies/hell-hounds.webp",
+      "destination": "https://raw.githubusercontent.com/ccmatrix501-spec/1st-MI-Tactical-Centre-By-Matrix/main/assets/companies/hell-hounds.webp"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://1st-mi-matrix-r-d-production.up.railway.app/:path*"
     }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "mi-tactical-centre-disabled-desktop-1.3.27";
+const CACHE_NAME = "mi-tactical-centre-disabled-desktop-1.3.29";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(

@@ -1,1 +1,1 @@
-desktop-source 1.3.27 web+discord sync
+desktop-source 1.3.29 web+discord sync + cert-export permission patch
